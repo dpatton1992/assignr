@@ -1,0 +1,79 @@
+id: document-review-tui-and-review-packet-workflow
+title: Document review TUI, task graph, and ReviewPacket workflow
+status: pending
+type: docs
+domain: core
+priority: medium
+depends_on:
+  - add-interactive-review-tui
+  - add-task-graph-visualization-to-review-tui
+  - build-static-manciple-dev-landing-page
+blocks: []
+conflicts_with: []
+can_run_independently: false
+allowed_paths:
+  - README.md
+  - docs/review-tui.md
+  - docs/review-queue.md
+  - docs/mcp-server.md
+forbidden_paths:
+  - src/**
+  - tests/**
+  - package.json
+  - pnpm-lock.yaml
+  - docs/index.html
+  - docs/landing.css
+  - docs/landing.js
+  - docs/images/**
+  - dist/**
+  - .manciple/prompts/generated/**
+  - .manciple/tasks/completed/**
+  - .manciple/tasks/archived/**
+path_ownership:
+  touched_paths: []
+  locked_paths: []
+  unsafe_parallel_areas: []
+goal: Reviewers and integrations can discover and correctly use the TUI, task graph,
+  headless ReviewPacket interfaces, decision semantics, and pager-based inspection
+  workflow.
+acceptance_criteria:
+  - Documentation explains how to start the TUI, navigate every initial key binding,
+    inspect evidence and scope drift, use the pager, confirm decisions, and recover from
+    non-TTY or terminal errors.
+  - ReviewPacket is documented as the canonical assembled review contract, including
+    changed-path provenance, scope drift, verification states, warnings, dependencies,
+    available actions, and the guarantee that clients do not independently assemble
+    evidence from repository files.
+  - TaskGraphPacket is documented as the canonical graph contract, including directed
+    dependency and blocking edges, ownership and conflict edges, receipt-health states,
+    lifecycle tiers and statuses, default neighborhood scope, and filtering behavior.
+  - The TUI guide explains the Dependencies, Ownership, Receipts, and Status lenses,
+    graph navigation, depth and all-active controls, narrow-terminal fallback, legends,
+    ownership collision severity, and ReviewPacket drill-down.
+  - CLI JSON and MCP examples cover queue retrieval, one-task packet retrieval, and each
+    supported review decision, including required reasons and lifecycle effects.
+  - The docs clearly distinguish reject to failed, block to blocked, request changes to
+    in_progress, approve to complete, and reopen to in_progress.
+  - README links to the focused TUI guide without replacing the existing quickstart or
+    duplicating the full review workflow.
+  - Documentation retains the established principle that deep diffs belong in the user's
+    pager, delta, or editor rather than inside the initial TUI.
+implementation_notes:
+  - Derive command names, JSON examples, MCP tool names, and key bindings from the
+    implemented behavior after dependencies land; do not document speculative syntax.
+  - Document the graph as a view over TaskGraphPacket and the task detail as a view over
+    ReviewPacket; neither client contract permits independent repository-file assembly.
+  - This task depends on the active landing-page work because both claim README.md.
+    Preserve that task's website link and keep all landing assets out of scope.
+verification:
+  commands:
+    - pnpm test -- cliWorkflow mcpReviewTools reviewTuiCli taskGraphTui
+    - pnpm typecheck
+outputs_required:
+  - files_changed
+  - tests_run
+  - decisions_made
+  - risks
+notes:
+  - README.md overlap with build-static-manciple-dev-landing-page is intentional and
+    ordered through depends_on; do not edit README until that predecessor is complete.

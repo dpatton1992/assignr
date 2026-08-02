@@ -1,0 +1,75 @@
+id: expose-review-packets-through-cli-and-mcp
+title: Expose review packets through CLI and MCP
+status: pending
+type: implementation
+domain: core
+priority: high
+depends_on:
+  - add-assembled-review-packet-application-layer
+  - split-mcp-tool-registration-into-focused-modules
+blocks: []
+conflicts_with: []
+can_run_independently: false
+allowed_paths:
+  - src/commands/review.ts
+  - src/mcp.ts
+  - src/mcp/reviewTools.ts
+  - tests/reviewPacketCli.test.ts
+  - tests/mcpReviewTools.test.ts
+forbidden_paths:
+  - src/review/**
+  - src/tui/**
+  - package.json
+  - pnpm-lock.yaml
+  - dist/**
+  - .manciple/prompts/generated/**
+  - .manciple/tasks/completed/**
+  - .manciple/tasks/archived/**
+path_ownership:
+  touched_paths: []
+  locked_paths: []
+  unsafe_parallel_areas: []
+goal: Headless CLI and MCP clients can retrieve the same assembled review queue and
+  ReviewPacket and record the same review decisions without duplicating review logic.
+acceptance_criteria:
+  - The review command group provides machine-readable commands for the assembled review
+    queue and a ReviewPacket for one task, with documented stable JSON output, nonzero
+    exit behavior for invalid requests, and no ANSI styling in JSON.
+  - MCP registers manciple_list_review_queue and manciple_get_review_packet tools that
+    accept the standard repo argument and return the same JSON-safe service results as
+    the CLI-facing application layer.
+  - MCP registers one review-decision tool with typed approve, request_changes, reject,
+    block, and reopen actions; reason is required for request_changes, reject, and
+    block, and all mutations use the shared review action service.
+  - Existing human-facing review queue, prompt, check, approve, changes, and block
+    commands remain backwards compatible.
+  - Neither adapter directly reads task YAML, run logs, generated prompts, git state, or
+    lifecycle folders; tests fail if adapter fixtures would require that behavior.
+  - CLI and MCP contract tests cover successful queue and packet reads, absent tasks,
+    malformed decisions, required reasons, illegal lifecycle transitions, repo scoping,
+    and structured error results.
+implementation_notes:
+  - Treat CLI and MCP as thin adapters over ReviewPacket and review actions. They may
+    translate arguments and errors but must not reshape review evidence differently.
+  - Prefer `manciple review packet <task-id> --json` and `manciple review queue --json`
+    unless the final Commander registration requires an equivalent unambiguous form.
+  - Preserve the existing meaning of `manciple review <task-id>` as review-prompt
+    generation and all existing review subcommands.
+  - Register review tools in the focused MCP module layout produced by
+    split-mcp-tool-registration-into-focused-modules rather than rebuilding the old
+    monolithic src/mcp.ts registration.
+  - This task intentionally follows active CLI and MCP modularization work because it
+    touches their registration surfaces; do not run it concurrently with either
+    refactor.
+verification:
+  commands:
+    - pnpm typecheck
+    - pnpm test -- reviewPacketCli mcpReviewTools cliWorkflow mcpList
+outputs_required:
+  - files_changed
+  - tests_run
+  - decisions_made
+  - risks
+notes:
+  - Keep field names and enum values identical between CLI JSON and MCP structured
+    results so future web clients can consume the same ReviewPacket contract.

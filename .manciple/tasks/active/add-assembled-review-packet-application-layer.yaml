@@ -1,0 +1,94 @@
+id: add-assembled-review-packet-application-layer
+title: Add assembled ReviewPacket application layer
+status: pending
+type: implementation
+domain: core
+priority: high
+depends_on:
+  - modularize-cli-command-registration
+blocks: []
+conflicts_with: []
+can_run_independently: false
+allowed_paths:
+  - src/review/reviewPacket.ts
+  - src/review/reviewActions.ts
+  - src/commands/approve.ts
+  - src/commands/requestChanges.ts
+  - src/commands/blockReview.ts
+  - src/commands/reopen.ts
+  - tests/reviewPacket.test.ts
+  - tests/reviewOutcomeCommands.test.ts
+forbidden_paths:
+  - src/review/readiness.ts
+  - src/review/deterministicGate.ts
+  - src/review/evidence.ts
+  - src/commands/reviewQueue.ts
+  - src/mcp/**
+  - src/tui/**
+  - package.json
+  - pnpm-lock.yaml
+  - dist/**
+  - .manciple/prompts/generated/**
+  - .manciple/tasks/completed/**
+  - .manciple/tasks/archived/**
+path_ownership:
+  touched_paths: []
+  locked_paths: []
+  unsafe_parallel_areas: []
+goal: A single reusable review application layer assembles trustworthy ReviewPacket data
+  and performs review decisions for CLI, TUI, MCP, and future web clients.
+acceptance_criteria:
+  - The review layer exports typed getReviewQueue(), getTaskReviewPacket(taskId),
+    getScopeDrift(taskId), approveTask(taskId), requestChanges(taskId, reason),
+    rejectTask(taskId, reason), blockReview(taskId, reason), and reopenTask(taskId)
+    operations with injectable repository paths or context.
+  - ReviewPacket is JSON-safe, deterministic, and fully assembled; it includes task
+    identity and status, goal, claimed scope, actual changed paths and their source,
+    explicit scope drift, acceptance criteria with available evidence, required
+    verification commands and recorded outcomes, failed or missing checks, latest
+    receipt metadata and worker notes, risks, unresolved warnings or blockers,
+    dependency statuses, diff summary statistics, and currently available decisions.
+  - getReviewQueue() returns stable summary rows and counts for at least needs_review,
+    blocked, and completed tasks without requiring callers to load task YAML, run logs,
+    git state, generated prompts, or lifecycle directories independently.
+  - Packet assembly delegates readiness, evidence parsing, deterministic gate, path
+    matching, and coordinator semantics to the existing review modules instead of
+    copying those business rules into a second implementation.
+  - Existing approve, request-changes, block-review, and reopen CLI commands delegate
+    their mutations to the shared action layer while preserving their current output,
+    lifecycle moves, validation, and durable review-outcome receipts.
+  - Reject is a distinct durable review outcome with a mandatory reason; it moves a
+    needs_review task to failed in the active tier and does not introduce a new task
+    status. Reopen retains the existing completed-or-archived to in_progress behavior.
+  - Unit tests prove complete and incomplete packet assembly, deterministic ordering,
+    run-log versus git-status changed-file provenance, out-of-scope and forbidden-path
+    drift, dependency context, missing or failed checks, and every review action.
+implementation_notes:
+  - ReviewPacket is the application boundary. Presentation clients must receive this
+    object rather than coordinate direct reads of five separate YAML, log, prompt, and
+    git sources.
+  - Keep raw absolute filesystem paths out of the public packet; expose repo-relative
+    paths and optional content or identifiers that are safe for JSON serialization.
+  - Scope drift must distinguish declared allowed and forbidden patterns from concrete
+    changed paths and identify whether actual paths came from the latest run log, git
+    status fallback, or are unavailable.
+  - Represent command results structurally with passed, failed, skipped, or missing
+    states. Do not infer that mentioning a command proves it passed.
+  - Packet construction is read-only. Mutations live behind the action methods and must
+    validate legal lifecycle transitions before writing task files or receipts.
+  - This task intentionally overlaps command and test paths owned broadly by
+    modularize-cli-command-registration; start after that dependency is approved and
+    complete, even though Manciple also treats needs_review as dependency-usable.
+verification:
+  commands:
+    - pnpm typecheck
+    - pnpm test -- reviewPacket reviewOutcomeCommands reviewReadiness reviewQueue
+outputs_required:
+  - files_changed
+  - tests_run
+  - decisions_made
+  - risks
+notes:
+  - Existing readiness.ts and its test currently have user changes, so they are
+    explicitly forbidden; consume their exported types and functions without editing
+    those files.

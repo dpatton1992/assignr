@@ -1,0 +1,85 @@
+id: add-assembled-task-graph-packet
+title: Add assembled TaskGraphPacket model
+status: pending
+type: implementation
+domain: core
+priority: high
+depends_on:
+  - add-assembled-review-packet-application-layer
+blocks: []
+conflicts_with: []
+can_run_independently: false
+allowed_paths:
+  - src/graph/taskGraphPacket.ts
+  - tests/taskGraphPacket.test.ts
+forbidden_paths:
+  - src/review/**
+  - src/tui/**
+  - src/mcp/**
+  - src/commands/**
+  - src/specs/**
+  - package.json
+  - pnpm-lock.yaml
+  - dist/**
+  - .manciple/prompts/generated/**
+  - .manciple/tasks/completed/**
+  - .manciple/tasks/archived/**
+path_ownership:
+  touched_paths: []
+  locked_paths: []
+  unsafe_parallel_areas: []
+goal: A deterministic TaskGraphPacket assembles task relationships, path ownership,
+  receipt health, and lifecycle status for terminal and future graphical clients.
+acceptance_criteria:
+  - The graph layer exports typed getTaskGraphPacket(options) and
+    getTaskGraphNeighborhood(taskId, options) queries with injectable repository paths
+    or context and JSON-safe results.
+  - TaskGraphPacket nodes include task id, title, domain, priority, lifecycle tier and
+    status, allowed and forbidden paths, touched and locked paths, unsafe parallel
+    areas, receipt presence and freshness, verification health, documented risk state,
+    and whether a detailed ReviewPacket is available.
+  - Typed edges distinguish depends_on, blocks, conflicts_with, and ownership_overlap;
+    directed edges preserve task-spec direction, while ownership and conflict edges are
+    canonical undirected pairs emitted exactly once.
+  - Ownership-overlap edges identify the concrete normalized patterns or paths that
+    overlap and classify locked-path or unsafe-parallel collisions as stronger than
+    ordinary allowed or touched-path overlap.
+  - Receipt health uses explicit missing, incomplete, passing, or failing states based
+    on the latest non-superseded run log and recorded verification evidence; a command
+    mention without a result is not classified as passing.
+  - Default graph queries include all active tasks plus completed or archived tasks
+    directly referenced by those tasks. Options support focus task, traversal depth,
+    lifecycle tier, status, domain, edge type, and an explicit all-tasks mode.
+  - Graph nodes, edges, matched ownership paths, and filter metadata are sorted
+    deterministically, and cycles, dangling references, empty graphs, missing receipts,
+    superseded receipts, and mixed lifecycle tiers are covered by unit tests.
+  - Graph assembly reuses the repository loaders, path-ownership warnings, latest
+    receipt selection, readiness evidence, and ReviewPacket contracts already owned by
+    Manciple rather than creating alternate parsing or lifecycle semantics.
+implementation_notes:
+  - TaskGraphPacket is the only data contract the graph UI should consume. It should
+    contain presentation-neutral nodes, edges, legends, counts, and active filters, not
+    terminal coordinates, colors, or Ink components.
+  - Dependency and blocks edges are directed from the declaring task toward the
+    referenced task. conflicts_with and ownership_overlap edges are undirected and use
+    lexicographically ordered endpoint ids for stable identity.
+  - A focused neighborhood traverses both incoming and outgoing edges up to the
+    requested depth. The default depth is two; callers must opt into an unbounded view.
+  - Ownership is evidence, not merely decoration. Preserve declared patterns and the
+    overlap reason so clients can explain why two tasks are connected.
+  - Receipt summaries must expose their source task and repo-relative latest receipt
+    identifier without embedding raw absolute paths or full log contents.
+  - This task depends on the ReviewPacket application layer so status, receipt, and
+    evidence labels remain compatible across the review dashboard and graph.
+verification:
+  commands:
+    - pnpm typecheck
+    - pnpm test -- taskGraphPacket coordinator loadTasks reviewReadiness
+outputs_required:
+  - files_changed
+  - tests_run
+  - decisions_made
+  - risks
+notes:
+  - The new src/graph directory is intentionally separate from src/tui so later CLI,
+    MCP, or web clients can consume the graph packet without depending on Ink.

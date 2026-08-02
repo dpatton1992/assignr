@@ -1,0 +1,90 @@
+id: add-interactive-review-tui
+title: Add interactive review TUI
+status: pending
+type: implementation
+domain: core
+priority: high
+depends_on:
+  - expose-review-packets-through-cli-and-mcp
+  - remove-package-self-dependency-and-add-lint-script
+blocks: []
+conflicts_with: []
+can_run_independently: false
+allowed_paths:
+  - src/commands/review.ts
+  - src/tui/**
+  - tests/reviewTui.test.ts
+  - tests/reviewTuiCli.test.ts
+  - package.json
+  - pnpm-lock.yaml
+  - tsconfig.json
+forbidden_paths:
+  - src/review/**
+  - src/mcp/**
+  - src/commands/approve.ts
+  - src/commands/requestChanges.ts
+  - src/commands/blockReview.ts
+  - src/commands/reopen.ts
+  - dist/**
+  - .manciple/prompts/generated/**
+  - .manciple/tasks/completed/**
+  - .manciple/tasks/archived/**
+path_ownership:
+  touched_paths: []
+  locked_paths: []
+  unsafe_parallel_areas: []
+goal: Reviewers can triage evidence, inspect assembled task context, and record safe
+  review decisions from an Ink terminal dashboard with minimal context switching.
+acceptance_criteria:
+  - In an interactive terminal, bare `manciple review` opens the review dashboard;
+    existing review subcommands and `manciple review <task-id>` keep their current
+    behavior, while non-TTY bare invocation prints help and never hangs.
+  - The dashboard renders responsive queue counts and rows for needs_review, blocked,
+    and completed work plus a selected-task summary containing scope drift, acceptance
+    evidence, verification results, changed-file counts and diff statistics, risk,
+    worker or receipt metadata, dependencies, and unresolved warnings.
+  - The TUI obtains queue rows and selected-task evidence exclusively through
+    getReviewQueue() and getTaskReviewPacket(); no component reads YAML, run logs, git,
+    generated prompts, or Manciple directories directly.
+  - Keyboard navigation supports j/k and arrows, Enter to inspect, d for a task-scoped
+    external diff, r for the receipt, t for test and command evidence, g for dependency
+    context, a to approve, e to request changes, x to reject, o to reopen an eligible
+    completed or archived task, and q or Escape to leave the current view.
+  - Mutating keys show a clear confirmation step, display the resulting lifecycle
+    transition, require nonblank reasons for request changes and reject, and refresh the
+    queue from the service after success without optimistic local file mutation.
+  - Detailed diffs and long raw receipts open through a safely spawned PAGER, with a
+    documented fallback, while the TUI retains triage, evidence, navigation, and
+    decision responsibilities instead of implementing a full diff viewer.
+  - The terminal returns to a usable state after success, cancellation, pager exit,
+    expected errors, Ctrl-C, or an action failure.
+  - Component and CLI tests use an injected fake review service to cover rendering,
+    navigation, narrow terminals, empty queues, packet loading and error states,
+    confirmations, reason entry, action refresh, pager invocation, and non-TTY behavior.
+implementation_notes:
+  - Use Ink and React with versions compatible with the package's Node >=18 and ESM
+    support; add only the runtime and test dependencies needed for this TUI.
+  - Keep ReviewPacket as the sole view model. Components may derive display-only
+    formatting but must not reconstruct scope or readiness decisions.
+  - "`d` should scope git diff arguments to packet changed paths and surface untracked
+    paths separately. Spawn pager and git processes with argument arrays, not shell
+    interpolation of task ids, paths, reasons, or environment values."
+  - Reopen is available only when the shared service marks it as an available action.
+    Block remains available through the existing CLI and MCP contracts even if the first
+    TUI key map prioritizes reject as requested.
+  - This task intentionally overlaps package.json, pnpm-lock.yaml, tests, and review
+    command registration owned by active predecessor tasks. Begin only after those
+    dependencies are approved and complete.
+verification:
+  commands:
+    - pnpm typecheck
+    - pnpm test -- reviewTui reviewTuiCli cliWorkflow
+    - pnpm build
+outputs_required:
+  - files_changed
+  - tests_run
+  - decisions_made
+  - risks
+notes:
+  - The initial TUI delegates deep code inspection to the user's pager or diff tooling;
+    recreating a full GitHub-style diff viewer is explicitly out of scope.

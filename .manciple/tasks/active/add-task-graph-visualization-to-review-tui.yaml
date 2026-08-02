@@ -1,0 +1,83 @@
+id: add-task-graph-visualization-to-review-tui
+title: Add task graph visualization to review TUI
+status: pending
+type: implementation
+domain: core
+priority: high
+depends_on:
+  - add-assembled-task-graph-packet
+  - add-interactive-review-tui
+blocks: []
+conflicts_with: []
+can_run_independently: false
+allowed_paths:
+  - src/tui/**
+  - tests/taskGraphTui.test.ts
+forbidden_paths:
+  - src/graph/**
+  - src/review/**
+  - src/mcp/**
+  - src/commands/**
+  - package.json
+  - pnpm-lock.yaml
+  - tsconfig.json
+  - dist/**
+  - .manciple/prompts/generated/**
+  - .manciple/tasks/completed/**
+  - .manciple/tasks/archived/**
+path_ownership:
+  touched_paths: []
+  locked_paths: []
+  unsafe_parallel_areas: []
+goal: Reviewers can understand task topology, ownership collisions, receipt health, and
+  lifecycle state from a navigable terminal graph without leaving the review TUI.
+acceptance_criteria:
+  - Pressing g from the review queue or task detail opens a graph focused on the
+    selected task, and Enter on a graph node opens that task's existing ReviewPacket
+    detail without reassembling repository evidence in the UI.
+  - The primary graph layout shows dependency direction and blocking relationships,
+    displays status and receipt-health badges on every node, and renders ownership or
+    conflict edges with a visually distinct style and an explanatory legend.
+  - Reviewers can switch among Dependencies, Ownership, Receipts, and Status lenses;
+    each lens keeps the same selected node and topology while emphasizing its relevant
+    edges, badges, counts, warnings, and detail panel.
+  - Focus mode defaults to a two-hop neighborhood. Reviewers can expand or contract
+    depth, toggle an all-active view, filter by status, domain, tier, or edge type, and
+    reset filters without losing the selected task when it remains visible.
+  - Keyboard navigation supports j/k or arrows through visible nodes, h/l between
+    upstream and downstream dependency neighbors, Tab to cycle lenses, Enter to drill
+    down, and Escape or g to return to the prior review view.
+  - Ownership detail lists the exact overlapping patterns or paths and clearly marks
+    locked-path and unsafe-parallel collisions; receipt detail distinguishes missing,
+    incomplete, passing, and failing evidence; status detail includes lifecycle tier.
+  - Wide terminals use a deterministic layered ASCII topology. Narrow terminals fall
+    back to an indented focus list with explicit edge labels while preserving all four
+    lenses and navigation instead of clipping essential evidence.
+  - Cycles, multiple roots, disconnected active components, long task ids, empty graphs,
+    dangling references, resize events, filtering, lens switching, and ReviewPacket
+    drill-down are covered with injected TaskGraphPacket fixtures.
+implementation_notes:
+  - Consume TaskGraphPacket exclusively. TUI components must not load task YAML, scan
+    receipts, calculate path overlap, inspect git, or infer lifecycle relationships.
+  - Use a small deterministic terminal layout implemented inside the TUI rather than
+    adding a browser, Graphviz process, canvas, or general-purpose graph dependency.
+  - Dependency depth determines horizontal rank. Break layout cycles deterministically
+    by task id for display only and retain cycle metadata and edges in the detail panel.
+  - Status and receipt information remain node badges in every lens; lenses change
+    emphasis and detail, not the underlying truth or selection model.
+  - This task intentionally overlaps src/tui/** with add-interactive-review-tui and
+    begins only after that base TUI is approved and complete. It must extend the g key
+    placeholder already specified there rather than creating a second dashboard.
+verification:
+  commands:
+    - pnpm typecheck
+    - pnpm test -- taskGraphTui reviewTui
+    - pnpm build
+outputs_required:
+  - files_changed
+  - tests_run
+  - decisions_made
+  - risks
+notes:
+  - Deep receipt and code inspection continues to use the existing ReviewPacket detail
+    and pager flows; the graph is for topology, triage, and navigation.
