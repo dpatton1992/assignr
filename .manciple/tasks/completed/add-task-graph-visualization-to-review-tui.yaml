@@ -1,6 +1,6 @@
 id: add-task-graph-visualization-to-review-tui
 title: Add task graph visualization to review TUI
-status: needs_review
+status: complete
 type: implementation
 domain: core
 priority: high

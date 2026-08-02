@@ -1,6 +1,6 @@
 id: document-review-tui-and-review-packet-workflow
 title: Document review TUI, task graph, and ReviewPacket workflow
-status: needs_review
+status: complete
 type: docs
 domain: core
 priority: medium

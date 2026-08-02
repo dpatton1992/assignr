@@ -1,6 +1,6 @@
 id: modularize-cli-command-registration
 title: Modularize CLI command registration
-status: needs_review
+status: complete
 type: refactor
 domain: core
 priority: medium

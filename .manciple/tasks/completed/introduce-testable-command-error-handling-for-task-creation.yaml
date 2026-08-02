@@ -1,6 +1,6 @@
 id: introduce-testable-command-error-handling-for-task-creation
 title: Introduce testable command error handling for task creation
-status: needs_review
+status: complete
 type: refactor
 domain: core
 priority: high

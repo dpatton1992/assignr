@@ -1,6 +1,6 @@
 id: split-mcp-tool-registration-into-focused-modules
 title: Split MCP tool registration into focused modules
-status: needs_review
+status: complete
 type: refactor
 domain: core
 priority: medium

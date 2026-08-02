@@ -1,6 +1,6 @@
 id: build-static-manciple-dev-landing-page
 title: Build static manciple.dev landing page
-status: needs_review
+status: complete
 type: implementation
 domain: core
 priority: high

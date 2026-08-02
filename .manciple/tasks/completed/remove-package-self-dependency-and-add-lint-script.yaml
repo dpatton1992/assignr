@@ -1,6 +1,6 @@
 id: remove-package-self-dependency-and-add-lint-script
 title: Remove package self dependency and add lint script
-status: needs_review
+status: complete
 type: implementation
 domain: core
 priority: high
