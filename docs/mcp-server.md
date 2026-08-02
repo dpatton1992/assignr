@@ -16,7 +16,7 @@ The MCP binary is `manciple-mcp`.
 The MCP surface mirrors the core workflow:
 
 | Tool | Purpose |
-|---|---|
+|---|---|---|
 | `manciple_list` | List tasks. |
 | `manciple_get_task` | Read a task spec. |
 | `manciple_get_task_packet` | Read compact bounded worker context for one task. |
@@ -29,10 +29,114 @@ The MCP surface mirrors the core workflow:
 | `manciple_validate` | Validate task specs. |
 | `manciple_set_status` | Update task status. |
 | `manciple_run_log` | Create a run log. |
+| `manciple_list_review_queue` | Return the assembled review queue summary (`needsReview`, `blocked`, `completed` buckets). |
+| `manciple_get_review_packet` | Return the assembled ReviewPacket for one task. |
+| `manciple_review_decision` | Record one review decision (approve, request_changes, reject, block, reopen). |
 
 Agent skills use `manciple_dispatch_plan` before spawning workers,
 `manciple_get_task_packet` before task edits, and `manciple_verify` for worker,
 coordinator, or review receipts. Use `manciple_format_task` with `check_only`
 when a task needs scoped YAML formatting evidence.
 
-For the human CLI workflow, see [Getting Started](getting-started.md).
+The review tools (`manciple_list_review_queue`, `manciple_get_review_packet`,
+`manciple_review_decision`) are thin adapters over the same assembled
+ReviewPacket and review action services the CLI uses. Field names and enum
+values in their JSON results match the CLI-facing application layer, so web,
+CLI, and MCP clients consume one contract.
+
+For the human CLI workflow, see [Getting Started](getting-started.md). For the
+interactive review dashboard, see [Review TUI](review-tui.md).
+
+## Review Examples
+
+The `repo` argument scopes the operation to a repository checkout; it is
+optional and defaults to the MCP server's working directory.
+
+### Queue Retrieval
+
+```json
+{
+  "name": "manciple_list_review_queue",
+  "arguments": { "repo": "/path/to/repo" }
+}
+```
+
+Returns the assembled `ReviewQueueSummary`:
+
+```json
+{
+  "needsReview": { "rows": [{ "taskId": "build-login-page", "title": "Build login page", "status": "needs_review", "tier": "active", "domain": "auth", "priority": "high" }], "count": 1 },
+  "blocked": { "rows": [], "count": 0 },
+  "completed": { "rows": [], "count": 0 },
+  "total": 1
+}
+```
+
+### One-Task Packet Retrieval
+
+```json
+{
+  "name": "manciple_get_review_packet",
+  "arguments": { "repo": "/path/to/repo", "task_id": "build-login-page" }
+}
+```
+
+Returns the full assembled ReviewPacket — claimed scope, changed-path
+provenance, scope drift, acceptance coverage, verification outcomes, receipt,
+worker notes, risks, warnings, blockers, dependencies, diff summary, available
+decisions, and the readiness report. Clients consume this packet directly; the
+server assembles evidence from repository files once, so clients never
+independently assemble it.
+
+### Review Decisions
+
+`manciple_review_decision` takes `task_id`, `action`, and an optional
+`reason`. `reason` is required for `request_changes`, `reject`, and `block`;
+passing an empty or missing reason returns an error.
+
+```json
+{
+  "name": "manciple_review_decision",
+  "arguments": { "repo": "/path/to/repo", "task_id": "build-login-page", "action": "approve" }
+}
+```
+
+```json
+{
+  "name": "manciple_review_decision",
+  "arguments": { "repo": "/path/to/repo", "task_id": "build-login-page", "action": "request_changes", "reason": "Add password-reset test evidence." }
+}
+```
+
+```json
+{
+  "name": "manciple_review_decision",
+  "arguments": { "repo": "/path/to/repo", "task_id": "build-login-page", "action": "reject", "reason": "Acceptance criteria not satisfied." }
+}
+```
+
+```json
+{
+  "name": "manciple_review_decision",
+  "arguments": { "repo": "/path/to/repo", "task_id": "build-login-page", "action": "block", "reason": "Depends on unresolved auth migration." }
+}
+```
+
+```json
+{
+  "name": "manciple_review_decision",
+  "arguments": { "repo": "/path/to/repo", "task_id": "build-login-page", "action": "reopen" }
+}
+```
+
+Each decision returns the shared action result (`taskId`, `outcome`,
+`previousStatus`, `nextStatus`, `taskPath`, and the review-outcome receipt
+path when one is written) and applies the same lifecycle effects as the CLI:
+
+| Action | Reason | Lifecycle effect |
+|---|---|---|
+| `approve` | not required | `needs_review` → `complete` (moved to `tasks/completed/`) |
+| `request_changes` | required, nonblank | `needs_review` → `in_progress` |
+| `reject` | required, nonblank | `needs_review` → `failed` |
+| `block` | required, nonblank | `needs_review` → `blocked` |
+| `reopen` | not required | `complete`/`archived` → `in_progress` (moved back to `tasks/active/`) |

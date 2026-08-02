@@ -2,6 +2,7 @@ import React from "react";
 import { render } from "ink";
 import type { ManciplePaths } from "../utils/paths.js";
 import { createReviewService } from "./service.js";
+import { createGraphService } from "./graphService.js";
 import { ReviewTui } from "./app.js";
 import type { ReviewTuiSession } from "./app.js";
 import { openInPager } from "./pager.js";
@@ -22,6 +23,7 @@ export interface ReviewTuiRunOptions {
  */
 export async function runReviewTui(p: ManciplePaths, cwd: string, options: ReviewTuiRunOptions = {}): Promise<void> {
   const service = createReviewService(p, cwd);
+  const graphService = createGraphService(p, cwd);
   const env = options.env ?? process.env;
   const session: ReviewTuiSession = { selectedTaskId: null, view: "list", scroll: 0 };
   let pendingPager: string | null = null;
@@ -31,6 +33,7 @@ export async function runReviewTui(p: ManciplePaths, cwd: string, options: Revie
     app = render(
       React.createElement(ReviewTui, {
         service,
+        graphService,
         cwd,
         session,
         onOpenPager: (content: string) => {

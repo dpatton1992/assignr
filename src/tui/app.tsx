@@ -9,6 +9,8 @@ import type {
   ReviewQueueSummary,
 } from "../review/reviewPacket.js";
 import type { ReviewService } from "./service.js";
+import type { GraphService } from "./graphService.js";
+import { GraphView } from "./graphView.js";
 import { buildDiffContent } from "./pager.js";
 import type { CommandRunner } from "./pager.js";
 
@@ -35,6 +37,8 @@ export interface ReviewTuiSession {
 
 export interface ReviewTuiProps {
   service: ReviewService;
+  /** Optional graph data boundary; when present the `g` key opens the graph. */
+  graphService?: GraphService;
   cwd: string;
   onOpenPager: OpenPagerHandler;
   session?: ReviewTuiSession;
@@ -202,7 +206,7 @@ function detailLines(packet: ReviewPacket): string[] {
 }
 
 export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
-  const { service, cwd, onOpenPager, session, windowHeight, diffRunner } = props;
+  const { service, graphService, cwd, onOpenPager, session, windowHeight, diffRunner } = props;
   const { exit } = useApp();
   const { stdout } = useStdout();
 
@@ -219,6 +223,8 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Graph overlay: focused task and the review view to return to. */
+  const [graphFocus, setGraphFocus] = useState<{ taskId: string; from: "list" | "detail" } | null>(null);
 
   // Restore the pre-pager session when the launcher re-renders after a pager
   // round-trip (selected task, view, and scroll position).
@@ -332,6 +338,12 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
       return;
     }
 
+    // The graph overlay owns the keyboard while it is open; GraphView has its
+    // own useInput subscription and routes Escape / g / q back through onExit.
+    if (graphFocus) {
+      return;
+    }
+
     if (confirmAction) {
       if (key.escape || input === "n") {
         setConfirmAction(null);
@@ -389,6 +401,13 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
           moveSelection(-1);
           return;
         }
+        if (input === "g" && graphService) {
+          const selected = rows[selectedIndex];
+          if (selected) {
+            setGraphFocus({ taskId: selected.row.taskId, from: "list" });
+          }
+          return;
+        }
         if (key.return) {
           const selected = rows[selectedIndex];
           if (selected) loadPacket(selected.row.taskId);
@@ -426,8 +445,12 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
           return;
         }
         if (input === "g") {
-          setView("deps");
-          setScroll(0);
+          if (graphService) {
+            setGraphFocus({ taskId: packet.taskId, from: "detail" });
+          } else {
+            setView("deps");
+            setScroll(0);
+          }
           return;
         }
         if (input === "a") {
@@ -493,6 +516,18 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
         <Text dimColor>Enter confirms · Escape cancels · backspace edits</Text>
       </Box>
     );
+  } else if (graphFocus && graphService) {
+    body = (
+      <GraphView
+        graphService={graphService}
+        focusTask={graphFocus.taskId}
+        onDrillDown={(taskId) => {
+          setGraphFocus(null);
+          loadPacket(taskId);
+        }}
+        onExit={() => setGraphFocus(null)}
+      />
+    );
   } else if (view === "list") {
     body = (
       <Box flexDirection="column">
@@ -556,8 +591,8 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
               <Text key={scroll + index}>{line}</Text>
             ))}
             <Text dimColor>
-              d diff · r receipt · t tests · g deps · a approve · e changes · x reject · o reopen · ↑↓/jk scroll · q
-              back
+              d diff · r receipt · t tests · g {graphService ? "graph" : "deps"} · a approve · e changes · x reject ·
+              o reopen · ↑↓/jk scroll · q back
             </Text>
           </>
         ) : null}

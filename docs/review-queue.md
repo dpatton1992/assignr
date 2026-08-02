@@ -66,3 +66,54 @@ The review queue composes existing commands rather than replacing them.
 `manciple review-check` remains the source of readiness scoring and evidence
 checklist semantics. `manciple coordinator` remains the source of owner queue
 grouping, dependency usability, and path-conflict placement.
+
+For the interactive dashboard that turns the queue into a review session, see
+[Review TUI](review-tui.md).
+
+## Queue And Packet As JSON
+
+The same `review` command group exposes the assembled queue and one-task
+packet as stable JSON with no ANSI styling:
+
+```bash
+manciple review queue --json
+manciple review packet <task-id> --json
+```
+
+`review queue --json` prints the assembled `ReviewQueueSummary` — the
+`needsReview`, `blocked`, and `completed` buckets (each with `rows` and
+`count`) plus `total`:
+
+```json
+{
+  "needsReview": { "rows": [{ "taskId": "build-login-page", "title": "Build login page", "status": "needs_review", "tier": "active", "domain": "auth", "priority": "high" }], "count": 1 },
+  "blocked": { "rows": [], "count": 0 },
+  "completed": { "rows": [], "count": 0 },
+  "total": 1
+}
+```
+
+`review packet <task-id> --json` prints the full assembled ReviewPacket for
+one task — claimed scope, changed-path provenance, scope drift, acceptance
+criteria coverage, verification outcomes, receipt, worker notes, risks,
+warnings, blockers, dependencies, diff summary, available decisions, and the
+readiness report. See [Review TUI](review-tui.md#reviewpacket) for the field
+contract.
+
+## Review Decisions
+
+Recording a decision moves the task through the lifecycle and writes a durable
+review-outcome receipt:
+
+| Decision | Command | Reason | Lifecycle effect |
+|---|---|---|---|
+| Approve | `manciple review approve <task-id>` | not required | `needs_review` → `complete` (moved to `tasks/completed/`) |
+| Request changes | `manciple review changes <task-id> --reason <text>` | required, nonblank | `needs_review` → `in_progress` |
+| Reject | TUI `x` / MCP `manciple_review_decision` | required, nonblank | `needs_review` → `failed` |
+| Block | `manciple review block <task-id> --reason <text>` | required, nonblank | `needs_review` → `blocked` |
+| Reopen | `manciple reopen <task-id>` | not required | `complete`/`archived` → `in_progress` (moved back to `tasks/active/`) |
+
+Reject is available through the TUI (`x`), the MCP review decision tool, and
+the shared action layer; there is no standalone `manciple reject` CLI command.
+The legacy top-level forms (`manciple approve`, `manciple request-changes`,
+`manciple block-review`) are aliases of the same actions.

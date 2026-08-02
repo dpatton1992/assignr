@@ -159,6 +159,8 @@ manciple review build-login-page
 
 Reviewers get the original contract, the claimed changes, the files touched, the tests run, and the risks called out.
 
+For the interactive review dashboard — queue triage, packet evidence, task graph, and durable decisions — see the [Review TUI guide](docs/review-tui.md).
+
 ---
 
 ### Parallel agent workflows
@@ -300,6 +302,7 @@ outputs_required:
 | `manciple handoff [task-id]`             | Compile an agent-ready prompt or inspect the worker queue. |
 | `manciple run-log <task-id>`             | Record commands, files, result, model, agent, and risks.   |
 | `manciple set-status <task-id> <status>` | Update task lifecycle state.                               |
+| `manciple review`                       | Open the interactive review dashboard (TTY) or show help.  |
 | `manciple review <task-id>`              | Generate a reviewer prompt.                                |
 | `manciple review-check [task-id]`        | Check whether required review evidence exists.             |
 | `manciple doctor`                        | Check repo configuration.                                  |
@@ -337,6 +340,7 @@ The human owns the review.
 * [Task Lifecycle](docs/task-lifecycle.md)
 * [Parallel Workflows](docs/parallel-workflows.md)
 * [Evidence and Review](docs/evidence-and-review.md)
+* [Review TUI](docs/review-tui.md)
 * [Review Queue](docs/review-queue.md)
 * [MCP Server](docs/mcp-server.md)
 * [OpenCode Agents](docs/opencode-agents.md)
