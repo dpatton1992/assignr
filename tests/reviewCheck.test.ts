@@ -358,9 +358,13 @@ describe("reviewCheckCommand", () => {
     }
   });
 
-  it("reports deterministic claimed-path overlap", () => {
+  it("reports claimed-path overlap as an advisory without failing the gate", () => {
     writeTask("target-overlap", {
-      allowed_paths: ["src/review/"],
+      allowed_paths: [
+        "src/review/",
+        "src/commands/reviewCheck.ts",
+        "tests/reviewCheck.test.ts",
+      ],
     });
     writeTask("owner-overlap", {
       status: "in_progress",
@@ -386,8 +390,12 @@ describe("reviewCheckCommand", () => {
         activeDir: p.tasksActive,
         completedDir: p.tasksCompleted,
         archivedDir: p.tasksArchived,
-      })).toThrow("process.exit(1)");
-      expect(logSpy.mock.calls.flat().join("\n")).toContain("path-ownership");
+      })).not.toThrow();
+      expect(exitSpy).not.toHaveBeenCalled();
+      const output = logSpy.mock.calls.flat().join("\n");
+      expect(output).toContain("pass");
+      expect(output).toContain("Advisories");
+      expect(output).toContain("overlaps touched claim");
     } finally {
       logSpy.mockRestore();
       exitSpy.mockRestore();

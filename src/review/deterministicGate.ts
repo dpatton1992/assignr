@@ -39,6 +39,7 @@ export interface DeterministicReviewTaskReport {
   acceptanceCriteriaCount: number;
   ready: boolean;
   blockers: DeterministicReviewBlocker[];
+  advisories: DeterministicReviewBlocker[];
   readiness?: ReviewReadinessReport;
 }
 
@@ -101,11 +102,7 @@ function displayPath(cwd: string, path: string): string {
 }
 
 function changedFilesFor(readiness: ReviewReadinessReport, gitChangedFiles: string[]): string[] {
-  return unique([
-    ...gitChangedFiles,
-    ...(readiness.changedFilesSource === "git-status" ? gitChangedFiles : []),
-    ...readiness.overlappingFiles,
-  ]);
+  return readiness.changedFilesSource === "git-status" ? unique(gitChangedFiles) : [];
 }
 
 function filesFromRunLog(content: string | undefined): string[] {
@@ -285,13 +282,11 @@ export function evaluateDeterministicReviewGate(
       blockers
     );
 
-    for (const warning of pathOwnershipWarningsForTask(task, tasks)) {
-      blockers.push({
-        taskId: task.spec.id,
-        kind: "path-ownership",
-        reason: `Path ${warning.affected_path} overlaps ${warning.kind} claim ${warning.owner_path} by ${warning.owner_task_id}.`,
-      });
-    }
+    const advisories = pathOwnershipWarningsForTask(task, tasks).map((warning) => ({
+      taskId: task.spec.id,
+      kind: "path-ownership" as const,
+      reason: `Path ${warning.affected_path} overlaps ${warning.kind} claim ${warning.owner_path} by ${warning.owner_task_id}.`,
+    }));
 
     return {
       taskId: task.spec.id,
@@ -299,6 +294,7 @@ export function evaluateDeterministicReviewGate(
       acceptanceCriteriaCount: task.spec.acceptance_criteria.length,
       ready: blockers.length === 0,
       blockers,
+      advisories,
       readiness,
     };
   });

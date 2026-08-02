@@ -115,8 +115,8 @@ function riskFlagsFor(taskReport: DeterministicReviewTaskReport): string[] {
   const readiness = taskReport.readiness;
   const flags = new Set<string>();
 
-  for (const blocker of taskReport.blockers) {
-    switch (blocker.kind) {
+  for (const issue of [...taskReport.blockers, ...taskReport.advisories]) {
+    switch (issue.kind) {
       case "missing-evidence":
       case "missing-run-log":
       case "missing-generated-prompt":
@@ -168,7 +168,10 @@ function evidenceCoverage(taskReport: DeterministicReviewTaskReport): string {
 
 function reviewerQuestionFor(taskReport: DeterministicReviewTaskReport): string {
   const readiness = taskReport.readiness;
-  const firstReason = taskReport.blockers[0]?.reason ?? readiness?.humanReviewReasons[0] ?? "";
+  const firstReason = taskReport.blockers[0]?.reason ??
+    readiness?.humanReviewReasons[0] ??
+    taskReport.advisories[0]?.reason ??
+    "";
 
   if (/failed|verification/i.test(firstReason)) {
     return "Which verification result should the reviewer trust?";
@@ -398,8 +401,9 @@ function runDeepMode(
     let usedBudget = 0;
 
     for (const taskReport of report.taskReports) {
-      const decision = decisionFor(taskReport.blockers);
       const riskFlags = riskFlagsFor(taskReport);
+      const gateDecision = decisionFor(taskReport.blockers);
+      const decision = gateDecision === "pass" && riskFlags.length > 0 ? "escalate" : gateDecision;
 
       if (decision === "blocked" || (!includeAll && decision === "pass")) {
         continue;
@@ -457,8 +461,9 @@ function runDeepMode(
   let printedFirst = false;
 
   for (const taskReport of report.taskReports) {
-    const decision = decisionFor(taskReport.blockers);
     const riskFlags = riskFlagsFor(taskReport);
+    const gateDecision = decisionFor(taskReport.blockers);
+    const decision = gateDecision === "pass" && riskFlags.length > 0 ? "escalate" : gateDecision;
 
     if (decision === "blocked" || (!includeAll && decision === "pass")) {
       continue;

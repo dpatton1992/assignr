@@ -23,11 +23,11 @@ Pass that root as the `repo` argument on every Manciple MCP call. Manciple MCP i
 global; it must return data scoped to the requested `repo`, not to the server
 process working directory.
 
-Prefer deterministic MCP tool results over agent judgment. Use repo-local CLI
-commands only when MCP tools are unavailable.
+Prefer deterministic MCP tool results over agent judgment. Use commands from the
+globally installed public CLI only when MCP tools are unavailable.
 
 - `manciple_get_task_packet <task-id>` — load compact task context
-- `pnpm exec manciple review check <task-id> --deterministic --machine` — run the
+- `manciple review check <task-id> --deterministic --machine` — run the
   task-specific deterministic review gate (CLI; there is no equivalent MCP tool yet)
 - `manciple_verify --profile review` — verify Manciple's review implementation itself;
   do not use this as evidence that a particular task is review-ready
@@ -39,8 +39,10 @@ Use these CLI commands for verdict recording when MCP tools are unavailable:
 - `manciple request-changes <task-id>`
 - `manciple block-review <task-id>`
 
-When using CLI fallback, run commands from the resolved repo root and prefer
-`pnpm exec manciple ...` so the local Manciple implementation is used.
+When using CLI fallback, run the globally installed public package from the
+resolved repo root with `manciple ...`. This intentionally dogfoods the published
+package. Do not invoke `src/cli.ts`, `bin/manciple.js`, or `pnpm exec manciple`:
+those repository-local paths can mask defects in the publicly available package.
 
 ## Review Workflow
 
@@ -52,7 +54,7 @@ that absolute root as `repo` on every Manciple MCP call.
 Identify the task to review. If the user did not name a task, list tasks in `needs_review` status:
 
 ```sh
-pnpm exec manciple list --status needs_review
+manciple list --status needs_review
 ```
 
 When no specific task is named, review every reviewable `needs_review` task by default. Sort the queue by the timestamp of each task's latest non-review-outcome run log under `.manciple/runs/`, oldest first, so the task completed least recently is reviewed first. If a `needs_review` task has no run log, treat it as not review-ready and record/request changes for missing evidence rather than silently skipping it.
@@ -69,7 +71,7 @@ If the packet status is not `needs_review`, stop and report the mismatch. Do not
 Run the task-specific deterministic review gate from the resolved repo root:
 
 ```sh
-pnpm exec manciple review check <task-id> --deterministic --machine
+manciple review check <task-id> --deterministic --machine
 ```
 
 This command must name the task being reviewed. `manciple_verify --profile
@@ -79,7 +81,7 @@ task-specific gate.
 
 Check that the task has a run log entry. If one does not exist, check with:
 ```sh
-pnpm exec manciple list --status needs_review --domain <domain>
+manciple list --status needs_review --domain <domain>
 ```
 
 If review readiness checks fail (e.g., missing run log, incomplete verification), record the issues and set status to `blocked` or `request-changes` depending on severity.
@@ -106,8 +108,8 @@ Walk through each acceptance criterion from the task spec. For each criterion:
 3. Determine pass/fail/not-applicable.
 
 Use `manciple_get_task` with the same `repo` argument to get the full spec if the
-packet is insufficient. If MCP is unavailable, use `pnpm exec manciple
-task-packet <task-id>` or read only the repo-local task YAML needed for review
+packet is insufficient. If MCP is unavailable, use `manciple task-packet
+<task-id>` or read only the repo-local task YAML needed for review
 context.
 
 If the implementation notes mention specific constraints, verify those were respected.
@@ -126,13 +128,13 @@ When in doubt between request-changes and block, prefer request-changes unless t
 
 ### Step 6: Record the review outcome
 
-Record the verdict with the repo-local outcome command:
+Record the verdict with the published CLI outcome command:
 ```sh
-pnpm exec manciple approve <task-id>
+manciple approve <task-id>
 # or
-pnpm exec manciple request-changes <task-id> --reason "<failed criteria and required changes>"
+manciple request-changes <task-id> --reason "<failed criteria and required changes>"
 # or
-pnpm exec manciple block-review <task-id> --reason "<blocking condition>"
+manciple block-review <task-id> --reason "<blocking condition>"
 ```
 
 These commands write a separate `*-review-outcome.md` file and update lifecycle
@@ -149,7 +151,7 @@ In your final response, include:
 - task id and title reviewed
 - verdict (approve / request-changes / block)
 - acceptance criteria results: pass/fail per criterion
-- verification receipt from `pnpm exec manciple review check <task-id>
+- verification receipt from `manciple review check <task-id>
   --deterministic --machine`
 - files changed (from git diff)
 - follow-up tasks or issues identified
@@ -163,7 +165,7 @@ Keep the report concise but preserve specific evidence references.
 
 All of:
 - [ ] Task status is `needs_review`
-- [ ] `pnpm exec manciple review check <task-id> --deterministic --machine` passes
+- [ ] `manciple review check <task-id> --deterministic --machine` passes
 - [ ] All acceptance criteria are satisfied
 - [ ] Changes are scoped to `allowed_paths`
 - [ ] No `forbidden_paths` were modified

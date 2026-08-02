@@ -94,11 +94,14 @@ describe("review outcome commands", () => {
       );
 
       expect(skill).toContain(
-        "pnpm exec manciple review check <task-id> --deterministic --machine"
+        "manciple review check <task-id> --deterministic --machine"
       );
       expect(skill).toContain("Do not call `manciple_run_log` for a review verdict");
-      expect(skill).toContain("pnpm exec manciple request-changes <task-id> --reason");
-      expect(skill).not.toContain("pnpm exec manciple verify --profile review");
+      expect(skill).toContain("manciple request-changes <task-id> --reason");
+      expect(skill).toContain("globally installed public package");
+      expect(skill).toContain("Do not invoke `src/cli.ts`, `bin/manciple.js`, or `pnpm exec manciple`");
+      expect(skill).not.toContain("node --import tsx src/cli.ts");
+      expect(skill).not.toContain("node bin/manciple.js review check");
     }
   });
 

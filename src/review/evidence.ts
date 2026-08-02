@@ -272,6 +272,14 @@ function parseVerificationReceipt(section: string): Pick<
       commandResults,
     };
   } catch (error) {
+    const humanReadableOk = verificationReceipt.match(/\bok\s*[:=]\s*(true|false)\b/i)?.[1];
+    if (humanReadableOk) {
+      return {
+        verificationReceipt,
+        verificationResults: [humanReadableOk.toLowerCase() === "true" ? "passed" : "failed"],
+      };
+    }
+
     return {
       verificationReceipt,
       verificationReceiptParseError: error instanceof Error ? error.message : String(error),

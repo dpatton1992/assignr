@@ -2,7 +2,7 @@ import { spawnSync } from "child_process";
 import { loadTasks } from "../specs/loadTasks.js";
 import type { LoadedTaskWithTier, TaskTier } from "../specs/loadTasks.js";
 import type { TaskSpec } from "../specs/schema.js";
-import { evaluateReviewReadiness } from "./readiness.js";
+import { evaluateReviewReadiness, verificationCommandsMatch } from "./readiness.js";
 import type {
   ReviewReadinessReport,
   ReviewReadinessRunLog,
@@ -260,14 +260,24 @@ function acceptanceCriteriaFor(
   runLogs: readonly ReviewReadinessRunLog[],
   uncoveredCriteria: string[]
 ): ReviewAcceptanceCriterion[] {
+  const entries = runLogs.flatMap((log) => log.acceptanceCriteriaEvidence ?? []);
   const evidenceByCriterion = new Map<string, string>();
-  for (const entry of runLogs.flatMap((log) => log.acceptanceCriteriaEvidence ?? [])) {
+  for (const entry of entries) {
     if (!entry.criterion) continue;
     const key = entry.criterion.trim();
     const existing = evidenceByCriterion.get(key);
     if (existing === undefined || entry.evidence) {
       evidenceByCriterion.set(key, entry.evidence ?? existing ?? "");
     }
+  }
+
+  if (entries.length > 1 && entries.length === spec.acceptance_criteria.length) {
+    entries.forEach((entry, index) => {
+      const criterion = spec.acceptance_criteria[index];
+      if (!evidenceByCriterion.has(criterion)) {
+        evidenceByCriterion.set(criterion, entry.evidence ?? entry.criterion);
+      }
+    });
   }
 
   return spec.acceptance_criteria.map((criterion) => ({
@@ -282,17 +292,6 @@ function acceptanceCriteriaFor(
  * is only considered recorded when the receipt entry is exact or carries an
  * explicit result suffix (": passed", "-> exit code 0", "(ok)", ...).
  */
-function commandsMatch(expected: string, recorded: string): boolean {
-  const normalizedExpected = expected.trim().replace(/\s+/g, " ");
-  const normalizedRecorded = recorded.trim().replace(/\s+/g, " ");
-
-  if (normalizedRecorded === normalizedExpected) return true;
-  if (!normalizedRecorded.startsWith(normalizedExpected)) return false;
-
-  const suffix = normalizedRecorded.slice(normalizedExpected.length);
-  return /^(?::\s*|\s+(?:->|=>|[-–—])\s+|\s+\()/.test(suffix);
-}
-
 function requiredCommandOutcomes(
   requiredCommands: string[],
   runLogs: readonly ReviewReadinessRunLog[]
@@ -308,7 +307,7 @@ function requiredCommandOutcomes(
   );
 
   return requiredCommands.map((command) => {
-    const result = results.find((entry) => commandsMatch(command, entry.command));
+    const result = results.find((entry) => verificationCommandsMatch(command, entry.command));
     if (result) {
       const status = result.status === "passed" || result.status === "failed"
         ? result.status
@@ -319,7 +318,7 @@ function requiredCommandOutcomes(
         ...(result.result ? { detail: result.result } : {}),
       };
     }
-    if (recordedCommands.some((entry) => commandsMatch(command, entry))) {
+    if (recordedCommands.some((entry) => verificationCommandsMatch(command, entry))) {
       return { command, status: "skipped" as const, detail: "recorded without a structured result" };
     }
     if (receiptFailed) {
@@ -459,7 +458,10 @@ export function getTaskReviewPacket(taskId: string, context: ReviewPacketContext
       notes: latest?.notes ?? undefined,
     },
     risks: readiness.documentedRisks,
-    warnings: readiness.humanReviewReasons,
+    warnings: unique([
+      ...readiness.humanReviewReasons,
+      ...gate.taskReports.flatMap((report) => report.advisories.map((advisory) => advisory.reason)),
+    ]),
     blockers,
     dependencies: dependencyStatusesFor(found.spec, tasks),
     diffSummary: {

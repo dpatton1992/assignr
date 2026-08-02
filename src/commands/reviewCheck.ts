@@ -119,6 +119,9 @@ export function reviewCheckCommand(
             console.log(`blocked\t${blocker.taskId}\t${blocker.kind}\t${blocker.reason}`);
           }
         }
+        for (const advisory of taskReport.advisories) {
+          console.log(`warning\t${advisory.taskId}\t${advisory.kind}\t${advisory.reason}`);
+        }
       }
       for (const blocker of report.loadBlockers) {
         console.log(`blocked\t${blocker.taskId}\t${blocker.kind}\t${blocker.reason}`);
@@ -214,6 +217,15 @@ export function reviewCheckCommand(
           const color = colorForBlockerKind(blocker.kind);
           console.log(`    ${color("•")} ${color(blocker.kind)}: ${blocker.reason}`);
         }
+      }
+    }
+
+    const advisories = report.taskReports.flatMap((taskReport) => taskReport.advisories);
+    if (advisories.length > 0) {
+      console.log("");
+      console.log(`  ${picocolors.yellow("Advisories")}`);
+      for (const advisory of advisories) {
+        console.log(`    ${picocolors.yellow("•")} ${advisory.taskId}: ${advisory.reason}`);
       }
     }
 

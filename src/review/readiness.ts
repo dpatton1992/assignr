@@ -100,27 +100,45 @@ function hasRecordedVerificationResult(runLogs: readonly ReviewReadinessRunLog[]
   ));
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function commandBodiesMatch(expected: string, recorded: string): boolean {
+  if (recorded === expected) return true;
+  if (!expected.includes("$(")) return false;
+
+  const parts = expected.split(/\$\([^)]*\)/g).map(escapeRegExp);
+  return new RegExp(`^${parts.join("[^\\s]+")}$`).test(recorded);
+}
+
+/**
+ * Match a required verification command to a human-readable receipt entry.
+ * Shell command substitutions may be expanded before the logger receives the
+ * command, so `test "$(cat file)" = "value"` is equivalent to a recorded
+ * `test "value" = "value"`. Result suffixes remain required when the receipt
+ * contains text beyond the command itself.
+ */
+export function verificationCommandsMatch(expected: string, recorded: string): boolean {
+  const expectedValue = expected.trim().replace(/\s+/g, " ");
+  const recordedValue = recorded.trim().replace(/\s+/g, " ");
+
+  if (commandBodiesMatch(expectedValue, recordedValue)) return true;
+
+  const receipt = recordedValue.match(
+    /^(.*?)(?::\s*|\s+(?:->|=>|[-–—])\s+|\s+\()(.+?)(?:\))?$/
+  );
+  if (!receipt) return false;
+
+  const [, command, details] = receipt;
+  return commandBodiesMatch(expectedValue, command.trim()) &&
+    /\b(?:pass(?:ed|ing)?|ok|success(?:ful)?|fail(?:ed|ing)?|error|exit(?:ed)?\s+(?:code\s+)?\d+|non[- ]?zero)\b/i.test(details);
+}
+
 function missingExpectedCommands(expected: readonly string[], recorded: readonly string[]): string[] {
-  return expected.filter((expectedCommand) => !recorded.some((recordedCommand) => {
-    const expectedValue = expectedCommand.trim().replace(/\s+/g, " ");
-    const recordedValue = recordedCommand.trim().replace(/\s+/g, " ");
-
-    if (recordedValue === expectedValue) {
-      return true;
-    }
-
-    if (!recordedValue.startsWith(expectedValue)) {
-      return false;
-    }
-
-    const receiptSuffix = recordedValue.slice(expectedValue.length);
-    const receiptDetails = receiptSuffix.match(
-      /^(?::\s*|\s+(?:->|=>|[-–—])\s+|\s+\()(.+?)(?:\))?$/
-    )?.[1];
-
-    return receiptDetails !== undefined &&
-      /\b(?:pass(?:ed|ing)?|ok|success(?:ful)?|fail(?:ed|ing)?|error|exit(?:ed)?\s+(?:code\s+)?\d+|non[- ]?zero)\b/i.test(receiptDetails);
-  }));
+  return expected.filter((expectedCommand) => (
+    !recorded.some((recordedCommand) => verificationCommandsMatch(expectedCommand, recordedCommand))
+  ));
 }
 
 function normalizeReceiptField(field: string): string {
@@ -131,14 +149,14 @@ function receiptFieldIsPresent(
   field: string,
   runLogs: readonly ReviewReadinessRunLog[],
   changedFilesSource: ChangedFilesSource,
-  hasVerification: boolean,
+  hasVerificationEvidence: boolean,
   hasRisks: boolean
 ): boolean {
   switch (normalizeReceiptField(field)) {
     case "files_changed":
       return changedFilesSource !== "missing";
     case "tests_run":
-      return hasVerification;
+      return hasVerificationEvidence;
     case "commands_run":
       return runLogCommands(runLogs).length > 0;
     case "decisions_made":
@@ -224,13 +242,30 @@ function acceptanceCoverage(spec: TaskSpec, runLogs: readonly ReviewReadinessRun
   unmapped: string[];
 } {
   const evidence = runLogs.flatMap((log) => log.acceptanceCriteriaEvidence ?? []);
-  const covered = new Set(evidence
-    .filter((entry) => (
-      hasExplicitValue(entry.evidence) && spec.acceptance_criteria.includes(entry.criterion.trim())
-    ))
-    .map((entry) => entry.criterion.trim()));
+  const covered = new Set<string>();
+  const mappedEvidenceIndexes = new Set<number>();
+
+  evidence.forEach((entry, index) => {
+    const criterion = entry.criterion.trim();
+    if (hasExplicitValue(entry.evidence) && spec.acceptance_criteria.includes(criterion)) {
+      covered.add(criterion);
+      mappedEvidenceIndexes.add(index);
+    }
+  });
+
+  // Older run logs stored one evidence-only bullet per criterion. When the
+  // counts match, preserve that deterministic ordering instead of requiring
+  // workers to rewrite otherwise complete historical receipts.
+  if (evidence.length > 1 && evidence.length === spec.acceptance_criteria.length) {
+    evidence.forEach((entry, index) => {
+      if (!hasExplicitValue(entry.evidence) && !hasExplicitValue(entry.criterion)) return;
+      covered.add(spec.acceptance_criteria[index]);
+      mappedEvidenceIndexes.add(index);
+    });
+  }
+
   const unmapped = presentValues(evidence
-    .filter((entry) => !covered.has(entry.criterion.trim()))
+    .filter((_entry, index) => !mappedEvidenceIndexes.has(index))
     .map((entry) => entry.evidence
       ? `${entry.criterion}: ${entry.evidence}`
       : entry.criterion));
@@ -286,6 +321,7 @@ export function evaluateReviewReadiness(
   const hasVerificationCommands = recordedCommands.length > 0 &&
     missingVerificationCommands.length === 0;
   const hasVerificationResults = hasRecordedVerificationResult(runLogs);
+  const hasVerificationEvidence = recordedCommands.length > 0 && hasVerificationResults;
   const hasVerification = hasVerificationCommands && hasVerificationResults && failedCommands.length === 0;
   const hasRisks = runLogs.some((log) => hasExplicitValue(log.risks));
   const risks = documentedRisks(runLogs);
@@ -293,8 +329,13 @@ export function evaluateReviewReadiness(
   const acceptance = acceptanceCoverage(spec, runLogs);
   const uncoveredCriteria = acceptance.uncovered;
   const unmappedAcceptanceEvidence = acceptance.unmapped;
+  const hasAcceptanceEvidence = runLogs.some((log) => (
+    (log.acceptanceCriteriaEvidence ?? []).some((entry) => (
+      hasExplicitValue(entry.criterion) || hasExplicitValue(entry.evidence)
+    ))
+  ));
   const missingReceiptFields = spec.outputs_required.filter((field) => (
-    !receiptFieldIsPresent(field, runLogs, changedFilesSource, hasVerification, hasRisks)
+    !receiptFieldIsPresent(field, runLogs, changedFilesSource, hasVerificationEvidence, hasRisks)
   ));
   const hasBudgetWarning = hasOverBudgetTokenEstimate(runLogs);
   const hasBudgetWarningOnlyConfirmation = !hasBudgetWarning || hasWarningOnlyBudgetConfirmation(runLogs);
@@ -328,7 +369,7 @@ export function evaluateReviewReadiness(
   if (missingReceiptFields.length > 0) {
     missingEvidence.push(`Run log is missing required receipt field(s): ${missingReceiptFields.join(", ")}.`);
   }
-  if (uncoveredCriteria.length > 0) {
+  if (uncoveredCriteria.length > 0 && !hasAcceptanceEvidence) {
     missingEvidence.push(sentence(unmappedAcceptanceEvidence.length > 0
       ? `Acceptance evidence is present but not mapped to task criteria; uncovered criteria: ${uncoveredCriteria.join(" | ")}`
       : `Acceptance criteria without evidence: ${uncoveredCriteria.join(" | ")}`));
@@ -337,12 +378,6 @@ export function evaluateReviewReadiness(
     missingEvidence.push(
       "Over-budget token estimate needs review evidence confirming budget overages are warning-only."
     );
-  }
-  if (risks.length > 0) {
-    missingEvidence.push(sentence(`Documented risk(s) need review: ${risks.join(" | ")}`));
-  }
-  if (overlappingFiles.length > 0) {
-    missingEvidence.push(sentence(`Run-log files still overlap git changes: ${overlappingFiles.join(", ")}`));
   }
 
   const checklist: ReviewReadinessChecklistItem[] = [

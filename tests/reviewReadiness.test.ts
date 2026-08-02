@@ -87,7 +87,7 @@ describe("evaluateReviewReadiness", () => {
     expect(report.missingEvidence).toContain("Run log is missing expected verification command(s): pnpm test.");
     expect(report.missingEvidence).toContain("No verification result is recorded in the run log.");
     expect(report.missingEvidence).toContain("Run log is missing required receipt field(s): tests_run, decisions_made, follow_ups.");
-    expect(report.missingEvidence).toContain("Documented risk(s) need review: Deployment risk remains unknown.");
+    expect(report.missingEvidence).not.toContain("Documented risk(s) need review: Deployment risk remains unknown.");
   });
 
   it("reports no-run-log missing evidence", () => {
@@ -108,7 +108,7 @@ describe("evaluateReviewReadiness", () => {
     expect(report.missingEvidence).toContain("Run log is missing required receipt field(s): files_changed, tests_run, decisions_made, risks, follow_ups.");
   });
 
-  it("distinguishes overlapping files from missing receipts", () => {
+  it("treats uncommitted run-log files as a human advisory rather than missing evidence", () => {
     const report = evaluateReviewReadiness(task, {
       gitChangedFiles: ["src/review/readiness.ts", "README.md"],
       runLogs: [{
@@ -125,10 +125,11 @@ describe("evaluateReviewReadiness", () => {
       }],
     });
 
-    expect(report.ready).toBe(false);
+    expect(report.ready).toBe(true);
     expect(report.missingReceiptFields).toEqual([]);
     expect(report.overlappingFiles).toEqual(["src/review/readiness.ts"]);
-    expect(report.missingEvidence).toContain("Run-log files still overlap git changes: src/review/readiness.ts.");
+    expect(report.missingEvidence).toEqual([]);
+    expect(report.humanReviewNeeded).toBe(true);
   });
 
   it("distinguishes uncovered acceptance criteria", () => {
@@ -300,7 +301,102 @@ describe("evaluateReviewReadiness", () => {
     expect(report.documentedRisks).toEqual([]);
   });
 
-  it("does not let unrelated evidence or a no-risk prefix hide review gaps", () => {
+  it("matches verification commands after the shell expands command substitutions", () => {
+    const shellTask: TaskSpec = {
+      ...task,
+      verification: {
+        commands: ['test "$(cat docs/CNAME)" = "manciple.dev"', "pnpm test"],
+      },
+    };
+    const report = evaluateReviewReadiness(shellTask, {
+      runLogs: [{
+        filesChanged: ["src/review/readiness.ts"],
+        testsRun: ['test "manciple.dev" = "manciple.dev": passed', "pnpm test: passed"],
+        result: "complete",
+        decisionsMade: ["Recorded the expanded shell command."],
+        risks: "none",
+        followUps: ["none"],
+        acceptanceCriteriaEvidence: [{
+          criterion: "Readiness can be evaluated.",
+          evidence: "Covered by tests.",
+        }],
+      }],
+    });
+
+    expect(report.missingVerificationCommands).toEqual([]);
+    expect(report.hasVerification).toBe(true);
+    expect(report.ready).toBe(true);
+  });
+
+  it("maps legacy evidence-only bullets by criterion order when counts match", () => {
+    const orderedTask: TaskSpec = {
+      ...task,
+      acceptance_criteria: ["First criterion.", "Second criterion."],
+    };
+    const report = evaluateReviewReadiness(orderedTask, {
+      runLogs: [{
+        filesChanged: ["src/review/readiness.ts"],
+        testsRun: ["pnpm build: passed", "pnpm test: passed"],
+        result: "complete",
+        decisionsMade: ["Preserved legacy ordered evidence."],
+        risks: "none",
+        followUps: ["none"],
+        acceptanceCriteriaEvidence: [
+          { criterion: "The first behavior is covered." },
+          { criterion: "The second behavior is covered." },
+        ],
+      }],
+    });
+
+    expect(report.uncoveredAcceptanceCriteria).toEqual([]);
+    expect(report.unmappedAcceptanceEvidence).toEqual([]);
+    expect(report.ready).toBe(true);
+  });
+
+  it("keeps documented risks visible without turning them into missing evidence", () => {
+    const report = evaluateReviewReadiness(task, {
+      runLogs: [{
+        filesChanged: ["src/review/readiness.ts"],
+        testsRun: ["pnpm build: passed", "pnpm test: passed"],
+        result: "complete",
+        decisionsMade: ["Recorded the residual risk."],
+        risks: "Large repositories may take longer to inspect.",
+        followUps: ["none"],
+        acceptanceCriteriaEvidence: [{
+          criterion: "Readiness can be evaluated.",
+          evidence: "Covered by tests.",
+        }],
+      }],
+    });
+
+    expect(report.ready).toBe(true);
+    expect(report.documentedRisks).toEqual(["Large repositories may take longer to inspect."]);
+    expect(report.humanReviewNeeded).toBe(true);
+    expect(report.missingEvidence).toEqual([]);
+  });
+
+  it("records tests_run independently from unrelated missing verification commands", () => {
+    const report = evaluateReviewReadiness(task, {
+      runLogs: [{
+        filesChanged: ["src/review/readiness.ts"],
+        testsRun: ["pnpm build: passed"],
+        result: "complete",
+        decisionsMade: ["Recorded the partial verification run."],
+        risks: "none",
+        followUps: ["Run the remaining command."],
+        acceptanceCriteriaEvidence: [{
+          criterion: "Readiness can be evaluated.",
+          evidence: "Covered by tests.",
+        }],
+      }],
+    });
+
+    expect(report.missingVerificationCommands).toEqual(["pnpm test"]);
+    expect(report.missingReceiptFields).not.toContain("tests_run");
+    expect(report.ready).toBe(false);
+  });
+
+  it("keeps unmapped acceptance evidence as a human-review warning instead of a gate failure", () => {
     const report = evaluateReviewReadiness(task, {
       runLogs: [{
         filesChanged: ["src/review/readiness.ts"],
@@ -315,15 +411,14 @@ describe("evaluateReviewReadiness", () => {
       }],
     });
 
-    expect(report.ready).toBe(false);
+    expect(report.ready).toBe(true);
     expect(report.uncoveredAcceptanceCriteria).toEqual(["Readiness can be evaluated."]);
     expect(report.unmappedAcceptanceEvidence).toEqual(["A different claim was exercised."]);
     expect(report.documentedRisks).toEqual([
       "No known code risks. Browser validation was not performed.",
     ]);
-    expect(report.missingEvidence).toContain(
-      "Acceptance evidence is present but not mapped to task criteria; uncovered criteria: Readiness can be evaluated."
-    );
+    expect(report.humanReviewNeeded).toBe(true);
+    expect(report.missingEvidence).toEqual([]);
   });
 
   it("round-trips command, acceptance, and verification receipts through markdown", () => {
@@ -427,5 +522,34 @@ describe("evaluateReviewReadiness", () => {
     expect(report.missingEvidence.some((entry) => (
       entry.startsWith("Verification receipt is not parseable:") && entry.includes("not-json")
     ))).toBe(true);
+  });
+
+  it("accepts compact human-readable verification receipts with an explicit ok result", () => {
+    const content = buildRunLog(
+      task.title,
+      task.id,
+      task.status,
+      ".manciple/prompts/generated",
+      process.cwd(),
+      {
+        result: "complete",
+        filesChanged: ["src/review/readiness.ts"],
+        testsRun: ["pnpm build: passed", "pnpm test: passed"],
+        decisionsMade: ["Recorded verification evidence."],
+        risks: "none",
+        followUps: ["none"],
+        acceptanceCriteriaEvidence: [
+          "Readiness can be evaluated. => Covered by the readiness test.",
+        ],
+        verifyReceipt: "manciple_verify profile=worker ok=true; commands_run=2; failures=[]",
+      }
+    );
+
+    const runLogs = parseRunLogEvidence(content);
+    const report = evaluateReviewReadiness(task, { runLogs });
+
+    expect(runLogs[0].verificationReceiptParseError).toBeUndefined();
+    expect(runLogs[0].verificationResults).toEqual(["passed"]);
+    expect(report.ready).toBe(true);
   });
 });
