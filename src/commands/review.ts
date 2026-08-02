@@ -26,6 +26,33 @@ import { reviewQueueCommand } from "./reviewQueue.js";
 import { approveCommand } from "./approve.js";
 import { requestChangesCommand } from "./requestChanges.js";
 import { blockReviewCommand } from "./blockReview.js";
+import {
+  getReviewQueue,
+  getTaskReviewPacket,
+  ReviewPacketError,
+} from "../review/reviewPacket.js";
+import type { ReviewPacketContext } from "../review/reviewPacket.js";
+
+/**
+ * Machine-readable review adapters are thin layers over the assembled
+ * ReviewPacket application boundary. They must not read task YAML, run logs,
+ * generated prompts, git state, or lifecycle folders directly; all evidence
+ * reads happen inside src/review/* services.
+ */
+function reviewPacketContext(p: ManciplePaths, cwd: string): ReviewPacketContext {
+  return {
+    specsTasksDir: p.specsTasks,
+    cwd,
+    generatedDir: p.promptsGenerated,
+    activeDir: p.tasksActive,
+    completedDir: p.tasksCompleted,
+    archivedDir: p.tasksArchived,
+  };
+}
+
+function printJson(value: unknown): void {
+  console.log(JSON.stringify(value, null, 2));
+}
 
 function formatList(items: string[] | undefined): string {
   if (!items || items.length === 0) return "_None specified._";
@@ -267,10 +294,56 @@ export function reviewCommand(
   );
 }
 
-export function registerReviewCommands(program: Command, p: ManciplePaths, cwd: string): void {
+/**
+ * Bare `manciple review` behavior depends on whether the terminal is
+ * interactive. In a TTY the review dashboard TUI is launched; in a non-TTY
+ * context (pipes, scripts, CI) the command prints help and never hangs.
+ */
+export interface BareReviewDispatch {
+  isTty: boolean;
+  launchTui: (p: ManciplePaths, cwd: string) => void | Promise<void>;
+  showHelp: () => void;
+}
+
+export function dispatchBareReview(
+  dispatch: BareReviewDispatch,
+  p: ManciplePaths,
+  cwd: string
+): void | Promise<void> {
+  if (dispatch.isTty) {
+    return dispatch.launchTui(p, cwd);
+  }
+  dispatch.showHelp();
+  return undefined;
+}
+
+export interface ReviewCommandRegistrationOptions {
+  /** TTY detection override for tests; defaults to process.stdout.isTTY. */
+  isTty?: () => boolean;
+  /** TUI launcher override for tests; defaults to a lazy import of the review TUI. */
+  launchTui?: (p: ManciplePaths, cwd: string) => void | Promise<void>;
+  /** Help override for tests; defaults to the review command's own help output. */
+  showHelp?: () => void;
+}
+
+export function registerReviewCommands(
+  program: Command,
+  p: ManciplePaths,
+  cwd: string,
+  options: ReviewCommandRegistrationOptions = {}
+): void {
+  const isTty = options.isTty ?? (() => process.stdout.isTTY);
+  const launchTui =
+    options.launchTui ??
+    (async (paths: ManciplePaths, dir: string) => {
+      const { runReviewTui } = await import("../tui/launch.js");
+      await runReviewTui(paths, dir);
+    });
+  const showHelp = options.showHelp ?? (() => review.help());
+
   const review = program
     .command("review [task-id]")
-    .description("Manage the review process. See `manciple review --help` for subcommands.")
+    .description("Open the interactive review dashboard, or manage the review process. See `manciple review --help` for subcommands.")
     .option("--include-run-log", "Include full latest run log content.", false)
     .option("--include-diff", "Include full git diff content.", false)
     .action((taskId: string | undefined, opts: { includeRunLog: boolean; includeDiff: boolean }) => {
@@ -279,20 +352,44 @@ export function registerReviewCommands(program: Command, p: ManciplePaths, cwd: 
           includeRunLog: opts.includeRunLog,
           includeGitDiff: opts.includeDiff,
         });
-      } else {
-        review.help();
+        return;
       }
+      // Bare `manciple review` opens the interactive dashboard in a TTY and
+      // prints help (without hanging) when stdout is not a terminal.
+      void Promise.resolve(
+        dispatchBareReview(
+          {
+            isTty: isTty(),
+            launchTui,
+            showHelp,
+          },
+          p,
+          cwd
+        )
+      ).catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      });
     });
 
   review
     .command("queue")
-    .description("Run review queue triage (same as `manciple review-queue`).")
-    .option("--mode <mode>", "Review queue mode: triage or deep.", "triage")
+    .description("Run review queue triage (same as `manciple review-queue`). Use --json for the assembled queue as stable JSON.")
+    .option("--mode <mode>", "Review queue mode: triage or deep.")
     .option("--all", "In deep mode, include tasks that passed triage.", false)
     .option("--budget <tokens>", "Positive integer review budget estimate for queued packets.")
     .option("--deep-only <filter>", "In deep mode, emit only tasks matching the filter: risky.")
     .option("--machine", "Tab-delimited output for backward compatibility.", false)
-    .action((opts: { mode: string; all: boolean; budget?: string; deepOnly?: string; machine: boolean }) => {
+    .option("--json", "Print the assembled review queue as stable JSON with no ANSI styling.", false)
+    .action((opts: { mode: string; all: boolean; budget?: string; deepOnly?: string; machine: boolean; json: boolean }) => {
+      if (opts.json) {
+        if (opts.mode !== undefined && opts.mode !== "triage" && opts.mode !== "deep") {
+          console.error(`Unsupported review queue mode: ${opts.mode}. Allowed: triage, deep.`);
+          process.exit(1);
+        }
+        printJson(getReviewQueue(reviewPacketContext(p, cwd)));
+        return;
+      }
       reviewQueueCommand(p.tasksActive, cwd, {
         mode: opts.mode as "triage" | "deep",
         all: opts.all,
@@ -332,6 +429,35 @@ export function registerReviewCommands(program: Command, p: ManciplePaths, cwd: 
         includeRunLog: opts.includeRunLog,
         includeGitDiff: opts.includeDiff,
       });
+    });
+
+  review
+    .command("packet <task-id>")
+    .description("Assemble the ReviewPacket for one task. Use --json for stable machine-readable output.")
+    .option("--json", "Print the assembled ReviewPacket as stable JSON with no ANSI styling.", false)
+    .action((taskId: string, opts: { json: boolean }) => {
+      let packet: ReturnType<typeof getTaskReviewPacket>;
+      try {
+        packet = getTaskReviewPacket(taskId, reviewPacketContext(p, cwd));
+      } catch (error) {
+        if (error instanceof ReviewPacketError) {
+          console.error(error.message);
+          process.exit(1);
+        }
+        throw error;
+      }
+
+      if (opts.json) {
+        printJson(packet);
+        return;
+      }
+
+      console.log(`Review packet: ${packet.taskId} (${packet.status})`);
+      console.log(`  Title:     ${packet.title}`);
+      console.log(`  Readiness: ${packet.readiness.ready ? "ready" : "not ready"} (score ${packet.readiness.score}/100)`);
+      console.log(`  Decisions: ${packet.availableDecisions.map((decision) => decision.id).join(", ") || "none"}`);
+      console.log(`  Blockers:  ${packet.blockers.length}`);
+      console.log(`  Use --json for the full machine-readable packet.`);
     });
 
   review

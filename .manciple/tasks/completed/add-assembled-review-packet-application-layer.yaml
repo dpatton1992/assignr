@@ -1,6 +1,6 @@
 id: add-assembled-review-packet-application-layer
 title: Add assembled ReviewPacket application layer
-status: pending
+status: complete
 type: implementation
 domain: core
 priority: high

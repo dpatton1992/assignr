@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerHandoffTools } from "./mcp/handoffTools.js";
 export { compileTaskForMcp } from "./mcp/handoffTools.js";
 import { registerOverviewTools } from "./mcp/overviewTools.js";
+import { registerReviewTools } from "./mcp/reviewTools.js";
 import { registerRunLogTools } from "./mcp/runLogTools.js";
 import { registerTaskSpecTools } from "./mcp/taskSpecTools.js";
 
@@ -17,6 +18,7 @@ registerOverviewTools(server);
 registerTaskSpecTools(server);
 registerHandoffTools(server);
 registerRunLogTools(server);
+registerReviewTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

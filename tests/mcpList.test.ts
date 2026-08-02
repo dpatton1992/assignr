@@ -381,6 +381,50 @@ describe("listTasksForMcp", () => {
     });
   });
 
+  it("validates tasks over MCP with structured counts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "manciple-mcp-validate-"));
+    tempDirs.push(root);
+    const paths = getPaths(root, ".manciple");
+    mkdirSync(paths.specsDomains, { recursive: true });
+    writeFileSync(join(paths.specsDomains, "core.yaml"), "id: core\nname: Core\n", "utf-8");
+    writeTask(root, "active", "valid-task");
+    writeTask(root, "active", "other-task", "needs_review");
+
+    const tsxBin = join(
+      process.cwd(),
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "tsx.cmd" : "tsx"
+    );
+    const transport = new StdioClientTransport({
+      command: tsxBin,
+      args: [join(process.cwd(), "src", "mcp.ts")],
+      cwd: root,
+    });
+    const client = new Client({ name: "manciple-test", version: "0.0.0" });
+
+    await client.connect(transport);
+    const result = await client.callTool({
+      name: "manciple_validate",
+      arguments: {},
+    });
+    await client.close();
+
+    const text = result.content.find((part) => part.type === "text")?.text;
+    expect(text).toBeDefined();
+    const payload = JSON.parse(text!);
+
+    expect(payload).toMatchObject({
+      valid_count: 2,
+      error_count: 0,
+      counts: {
+        tasks_checked: 2,
+        domains_checked: 1,
+      },
+      errors: [],
+    });
+  });
+
   it("creates run logs over MCP with separated audit evidence", async () => {
     const root = await mkdtemp(join(tmpdir(), "manciple-mcp-run-log-"));
     tempDirs.push(root);

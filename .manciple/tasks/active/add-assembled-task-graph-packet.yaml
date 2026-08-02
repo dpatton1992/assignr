@@ -1,6 +1,6 @@
 id: add-assembled-task-graph-packet
 title: Add assembled TaskGraphPacket model
-status: pending
+status: needs_review
 type: implementation
 domain: core
 priority: high

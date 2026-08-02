@@ -1,6 +1,6 @@
 id: add-interactive-review-tui
 title: Add interactive review TUI
-status: pending
+status: needs_review
 type: implementation
 domain: core
 priority: high

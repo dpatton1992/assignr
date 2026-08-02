@@ -11,6 +11,15 @@ import { setStatusCommand } from "../src/commands/setStatus.js";
 import { approveCommand } from "../src/commands/approve.js";
 import { requestChangesCommand } from "../src/commands/requestChanges.js";
 import { blockReviewCommand } from "../src/commands/blockReview.js";
+import { reopenCommand } from "../src/commands/reopen.js";
+import {
+  approveTask,
+  blockReview as blockReviewAction,
+  rejectTask,
+  reopenTask,
+  requestChanges as requestChangesAction,
+  ReviewActionError,
+} from "../src/review/reviewActions.js";
 import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
@@ -293,5 +302,201 @@ describe("review outcome commands", () => {
     }));
 
     expect(message).toContain("expected needs_review, found pending");
+  });
+});
+
+describe("shared review action layer", () => {
+  it("approveTask returns a durable action result without printing", () => {
+    const taskId = createTaskInReview();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    let result: ReturnType<typeof approveTask>;
+    try {
+      result = approveTask(taskId, {
+        specsTasksDir: p.specsTasks,
+        completedDir: p.tasksCompleted,
+        runsDir: p.runs,
+        cwd,
+      });
+    } finally {
+      logSpy.mockRestore();
+    }
+
+    expect(result.outcome).toBe("approved");
+    expect(result.previousStatus).toBe("needs_review");
+    expect(result.nextStatus).toBe("complete");
+    expect(result.outcomePath).toMatch(/review-outcome\.md$/);
+    expect(result.outcomePath?.startsWith("/")).toBe(false);
+    expect(result.taskPath).toMatch(new RegExp(`${taskId}\\.yaml$`));
+
+    expect(existsSync(join(p.tasksCompleted, `${taskId}.yaml`))).toBe(true);
+    expect(readTaskStatus(join(p.tasksCompleted, `${taskId}.yaml`))).toBe("complete");
+    expect(latestOutcome()).toContain("- Outcome: approved");
+  });
+
+  it("rejectTask moves a needs_review task to failed in the active tier with a durable outcome", () => {
+    const taskId = createTaskInReview();
+
+    const result = rejectTask(taskId, "Acceptance evidence is incomplete.", {
+      specsTasksDir: p.specsTasks,
+      runsDir: p.runs,
+      cwd,
+    });
+
+    const activeFile = join(p.tasksActive, `${taskId}.yaml`);
+    expect(result.outcome).toBe("rejected");
+    expect(result.nextStatus).toBe("failed");
+    expect(result.taskPath).toMatch(new RegExp(`${taskId}\\.yaml$`));
+    expect(existsSync(activeFile)).toBe(true);
+    expect(existsSync(join(p.tasksCompleted, `${taskId}.yaml`))).toBe(false);
+    expect(readTaskStatus(activeFile)).toBe("failed");
+    expect(latestOutcome()).toContain("- Outcome: rejected");
+    expect(latestOutcome()).toContain("Acceptance evidence is incomplete.");
+  });
+
+  it("rejectTask requires a non-empty reason", () => {
+    const taskId = createTaskInReview();
+
+    expect(() => rejectTask(taskId, " ", {
+      specsTasksDir: p.specsTasks,
+      runsDir: p.runs,
+      cwd,
+    })).toThrow(ReviewActionError);
+    expect(() => rejectTask(taskId, "", {
+      specsTasksDir: p.specsTasks,
+      runsDir: p.runs,
+      cwd,
+    })).toThrow("required option '--reason <text>' must not be empty");
+  });
+
+  it("rejectTask only accepts tasks in needs_review", () => {
+    newCommand("Reject too soon", {
+      type: "implementation",
+      domain: "core",
+      priority: "high",
+      cwd,
+      activeDir: p.tasksActive,
+    });
+
+    expect(() => rejectTask("reject-too-soon", "Needs work.", {
+      specsTasksDir: p.specsTasks,
+      runsDir: p.runs,
+      cwd,
+    })).toThrow("expected needs_review, found pending");
+  });
+
+  it("blockReview action returns the blocked lifecycle result", () => {
+    const taskId = createTaskInReview();
+
+    const result = blockReviewAction(taskId, "Verification environment is unavailable.", {
+      specsTasksDir: p.specsTasks,
+      runsDir: p.runs,
+      cwd,
+    });
+
+    expect(result.outcome).toBe("blocked");
+    expect(result.nextStatus).toBe("blocked");
+    expect(readTaskStatus(join(p.tasksActive, `${taskId}.yaml`))).toBe("blocked");
+    expect(latestOutcome()).toContain("- Outcome: blocked");
+  });
+
+  it("requestChanges action returns the changes_requested lifecycle result", () => {
+    const taskId = createTaskInReview();
+
+    const result = requestChangesAction(taskId, "Add one more edge case.", {
+      specsTasksDir: p.specsTasks,
+      runsDir: p.runs,
+      cwd,
+    });
+
+    expect(result.outcome).toBe("changes_requested");
+    expect(result.nextStatus).toBe("in_progress");
+    expect(readTaskStatus(join(p.tasksActive, `${taskId}.yaml`))).toBe("in_progress");
+    expect(latestOutcome()).toContain("- Outcome: changes_requested");
+  });
+
+  it("reopenTask reopens a completed task through the shared action layer", () => {
+    const taskId = createTaskInReview();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      approveCommand(taskId, {
+        specsTasksDir: p.specsTasks,
+        completedDir: p.tasksCompleted,
+        runsDir: p.runs,
+        cwd,
+      });
+    } finally {
+      logSpy.mockRestore();
+    }
+
+    const result = reopenTask(taskId, {
+      specsTasksDir: p.specsTasks,
+      activeDir: p.tasksActive,
+      cwd,
+    });
+
+    expect(result.outcome).toBe("reopened");
+    expect(result.previousStatus).toBe("complete");
+    expect(result.nextStatus).toBe("in_progress");
+    expect(result.outcomePath).toBeUndefined();
+
+    const activeFile = join(p.tasksActive, `${taskId}.yaml`);
+    expect(existsSync(activeFile)).toBe(true);
+    expect(existsSync(join(p.tasksCompleted, `${taskId}.yaml`))).toBe(false);
+    expect(readTaskStatus(activeFile)).toBe("in_progress");
+  });
+
+  it("reopenCommand still delegates and preserves its output", () => {
+    const taskId = createTaskInReview();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      approveCommand(taskId, {
+        specsTasksDir: p.specsTasks,
+        completedDir: p.tasksCompleted,
+        runsDir: p.runs,
+        cwd,
+      });
+      reopenCommand(taskId, {
+        specsTasksDir: p.specsTasks,
+        activeDir: p.tasksActive,
+        cwd,
+      });
+    } finally {
+      logSpy.mockRestore();
+    }
+
+    expect(existsSync(join(p.tasksActive, `${taskId}.yaml`))).toBe(true);
+    expect(readTaskStatus(join(p.tasksActive, `${taskId}.yaml`))).toBe("in_progress");
+  });
+
+  it("review actions validate lifecycle transitions before writing task files", () => {
+    const taskId = createTaskInReview();
+
+    expect(() => approveTask(taskId, {
+      specsTasksDir: p.specsTasks,
+      runsDir: p.runs,
+      cwd,
+    })).toThrow(ReviewActionError);
+    expect(() => approveTask(taskId, {
+      specsTasksDir: p.specsTasks,
+      completedDir: p.tasksCompleted,
+      runsDir: p.runs,
+      cwd,
+    })).not.toThrow();
+
+    newCommand("Action blocked task", {
+      type: "implementation",
+      domain: "core",
+      priority: "high",
+      cwd,
+      activeDir: p.tasksActive,
+    });
+    expect(() => blockReviewAction("action-blocked-task", "Needs evidence.", {
+      specsTasksDir: p.specsTasks,
+      runsDir: p.runs,
+      cwd,
+    })).toThrow("expected needs_review, found pending");
   });
 });

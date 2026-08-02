@@ -1,6 +1,6 @@
 id: expose-review-packets-through-cli-and-mcp
 title: Expose review packets through CLI and MCP
-status: pending
+status: needs_review
 type: implementation
 domain: core
 priority: high
