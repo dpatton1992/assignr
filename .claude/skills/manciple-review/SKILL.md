@@ -1,6 +1,6 @@
 ---
 name: manciple-review
-description: Review completed Manciple task work by loading the task packet, checking review readiness with manciple_verify --profile review, evaluating acceptance criteria against run log and git diff evidence, and recording a deterministic verdict (approve/request-changes/block). Use when the user asks Claude Code to review, approve, or give feedback on a completed Manciple task.
+description: Review completed Manciple task work by loading the task packet, running the task-specific deterministic review gate, evaluating acceptance criteria against run log and git diff evidence, and recording a verdict (approve/request-changes/block). Use when the user asks Claude Code to review, approve, or give feedback on a completed Manciple task.
 ---
 
 # Manciple Review
@@ -27,10 +27,11 @@ Prefer deterministic MCP tool results over agent judgment. Use repo-local CLI
 commands only when MCP tools are unavailable.
 
 - `manciple_get_task_packet <task-id>` — load compact task context
-- `manciple_verify --profile review` — run deterministic review checks
+- `pnpm exec manciple review check <task-id> --deterministic --machine` — run the
+  task-specific deterministic review gate (CLI; there is no equivalent MCP tool yet)
+- `manciple_verify --profile review` — verify Manciple's review implementation itself;
+  do not use this as evidence that a particular task is review-ready
 - `manciple_verify --profile worker` — re-run worker verification if needed
-- `manciple_run_log` — record the review outcome
-- `manciple_set_status` — update task status after the review
 - `manciple_get_task <task-id>` — load full YAML spec when the packet is insufficient
 
 Use these CLI commands for verdict recording when MCP tools are unavailable:
@@ -65,15 +66,16 @@ If the packet status is not `needs_review`, stop and report the mismatch. Do not
 
 ### Step 2: Check review readiness
 
-Run the deterministic review verification:
+Run the task-specific deterministic review gate from the resolved repo root:
 
 ```sh
-manciple_verify --profile review
+pnpm exec manciple review check <task-id> --deterministic --machine
 ```
-or via CLI:
-```sh
-pnpm exec manciple verify --profile review
-```
+
+This command must name the task being reviewed. `manciple_verify --profile
+review` runs Manciple's typecheck and review-related unit tests; it does not
+load a task or inspect that task's run log, so it is not a substitute for the
+task-specific gate.
 
 Check that the task has a run log entry. If one does not exist, check with:
 ```sh
@@ -117,38 +119,28 @@ Choose one of:
 | Verdict | Condition | Next status |
 |---------|-----------|-------------|
 | **Approve** | All acceptance criteria pass. Verification passes. No issues found. | `complete` |
-| **Request changes** | Some acceptance criteria fail or issues are found. The work is partially correct but needs fixes. | `needs_review` (after fixes) or stay `needs_review` |
+| **Request changes** | Some acceptance criteria fail or issues are found. The work is partially correct but needs fixes. | `in_progress` |
 | **Block** | The task cannot proceed: wrong scope, missing dependencies, fundamental approach errors, or review readiness checks failed. | `blocked` |
 
 When in doubt between request-changes and block, prefer request-changes unless the task is fundamentally unsalvageable.
 
 ### Step 6: Record the review outcome
 
-Record the review by calling `manciple_run_log` with:
-
-- `task_id`: the reviewed task
-- `repo`: the resolved repo root
-- `task_status`: the new status after the review
-- `result`: one of `complete`, `partial`, `blocked`, or `failed`
-- `acceptance_criteria_evidence`: list of evidence lines showing how each criterion passed or failed
-- `follow_ups`: any issues found that need addressing
-- `risks`: residual concerns
-- `verify_receipt`: the receipt from `manciple_verify --profile review`
-- `notes`: review notes and verdict rationale
-
-If MCP is unavailable, record the verdict via repo-local CLI:
+Record the verdict with the repo-local outcome command:
 ```sh
 pnpm exec manciple approve <task-id>
 # or
-pnpm exec manciple request-changes <task-id>
+pnpm exec manciple request-changes <task-id> --reason "<failed criteria and required changes>"
 # or
-pnpm exec manciple block-review <task-id>
+pnpm exec manciple block-review <task-id> --reason "<blocking condition>"
 ```
 
-Set the final task status with `manciple_set_status`, passing the same `repo`:
-- `complete` when approved
-- `blocked` when blocked
-- Leave as `needs_review` when changes are requested (the implementor will re-submit)
+These commands write a separate `*-review-outcome.md` file and update lifecycle
+status. Do not call `manciple_run_log` for a review verdict: it creates a normal
+implementation run log, can become the latest evidence file, and can hide the
+worker receipt needed by a later review. Do not call `manciple_set_status` after
+an outcome command; the command already sets `complete`, `in_progress`, or
+`blocked` as appropriate.
 
 ### Step 7: Report
 
@@ -157,8 +149,8 @@ In your final response, include:
 - task id and title reviewed
 - verdict (approve / request-changes / block)
 - acceptance criteria results: pass/fail per criterion
-- verification receipt from `manciple_verify --profile review` or
-  `pnpm exec manciple verify --profile review`
+- verification receipt from `pnpm exec manciple review check <task-id>
+  --deterministic --machine`
 - files changed (from git diff)
 - follow-up tasks or issues identified
 - risks
@@ -171,8 +163,7 @@ Keep the report concise but preserve specific evidence references.
 
 All of:
 - [ ] Task status is `needs_review`
-- [ ] `manciple_verify --profile review` or
-      `pnpm exec manciple verify --profile review` passes
+- [ ] `pnpm exec manciple review check <task-id> --deterministic --machine` passes
 - [ ] All acceptance criteria are satisfied
 - [ ] Changes are scoped to `allowed_paths`
 - [ ] No `forbidden_paths` were modified

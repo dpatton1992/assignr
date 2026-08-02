@@ -34,7 +34,7 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
     .option("--follow-up <text>", "Follow-up note. May be repeated.", collect, [])
     .option("--decision <text>", "Decision made. May be repeated.", collect, [])
     .option("--verify-receipt <text>", "Verification receipt.")
-    .option("--acceptance-evidence <evidence>", "Acceptance criteria evidence line. May be repeated.", collect, [])
+    .option("--acceptance-evidence <evidence>", "Acceptance evidence as '<exact criterion text> => <evidence>'. May be repeated.", collect, [])
     .option("--risks <risks>", "Risks or residual concerns.")
     .option("--notes <notes>", "Free-form notes.")
     .action((taskId: string, opts: {
@@ -131,7 +131,7 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
     .option("--tests-run <command>", "Test command or test receipt executed during the run. May be repeated.", collect, [])
     .option("--file <path>", "Changed file path. May be repeated; otherwise git status is used.", collect, [])
     .option("--files-changed <path>", "Changed file path. May be repeated; otherwise git status is used.", collect, [])
-    .option("--acceptance-evidence <evidence>", "Acceptance criteria evidence line. May be repeated.", collect, [])
+    .option("--acceptance-evidence <evidence>", "Acceptance evidence as '<exact criterion text> => <evidence>'. May be repeated.", collect, [])
     .option("--verify-receipt <receipt>", "Deterministic verify receipt text or compact JSON.")
     .option("--decision <decision>", "Decision made during the run. May be repeated.", collect, [])
     .option("--follow-up <followUp>", "Follow-up task or note. May be repeated.", collect, [])

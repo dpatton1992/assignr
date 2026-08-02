@@ -77,6 +77,22 @@ afterEach(() => {
 });
 
 describe("review outcome commands", () => {
+  it("routes packaged review skills through the task gate and dedicated outcome commands", () => {
+    for (const harness of [".codex", ".claude"]) {
+      const skill = readFileSync(
+        join(process.cwd(), harness, "skills", "manciple-review", "SKILL.md"),
+        "utf-8"
+      );
+
+      expect(skill).toContain(
+        "pnpm exec manciple review check <task-id> --deterministic --machine"
+      );
+      expect(skill).toContain("Do not call `manciple_run_log` for a review verdict");
+      expect(skill).toContain("pnpm exec manciple request-changes <task-id> --reason");
+      expect(skill).not.toContain("pnpm exec manciple verify --profile review");
+    }
+  });
+
   it("documents review outcome commands and required reason options in CLI help", () => {
     const mainHelp = runCli(["--help"]);
     const allHelp = runCli(["--help", "--all"]);

@@ -27,7 +27,7 @@ export function registerRunLogTools(server: McpServer): void {
         acceptance_criteria_evidence: z
           .array(z.string())
           .optional()
-          .describe("Evidence lines showing how acceptance criteria were satisfied."),
+          .describe("Evidence lines formatted as '<exact criterion text> => <evidence>'."),
         decisions_made: z
           .array(z.string())
           .optional()

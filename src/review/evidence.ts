@@ -202,15 +202,101 @@ function parseAcceptanceEvidence(section: string): ReviewReadinessAcceptanceEvid
   }).filter((entry) => entry.criterion);
 }
 
+function verificationOutcome(value: string): "passed" | "failed" | undefined {
+  const outcomes = [...value.matchAll(
+    /\b(pass(?:ed|ing)?|ok|success(?:ful)?|fail(?:ed|ing)?|error|non[- ]?zero|exit(?:ed)?\s+(?:code\s+)?\d+)\b/gi
+  )];
+  const last = outcomes.at(-1)?.[1]?.toLowerCase();
+  if (!last) return undefined;
+  if (/^(?:pass|ok|success)/.test(last)) return "passed";
+  if (/^exit/.test(last)) return /\b0$/.test(last) ? "passed" : "failed";
+  return "failed";
+}
+
+function parseCommandReceipt(
+  line: string
+): NonNullable<ReviewReadinessRunLog["commandResults"]>[number] | undefined {
+  const separated = line.match(/^(.*)(?::\s*|\s+(?:->|=>|[-–—])\s+)(.+)$/);
+  const parenthesized = line.match(/^(.*?)\s+\((.+)\)$/);
+  const match = separated ?? parenthesized;
+  if (!match) return undefined;
+
+  const [, command, result] = match;
+  const status = verificationOutcome(result);
+  if (!command.trim() || !status) return undefined;
+  return { command: command.trim(), result: result.trim(), status };
+}
+
+function parseVerificationReceipt(section: string): Pick<
+  ReviewReadinessRunLog,
+  "verificationReceipt" | "verificationReceiptParseError" | "verificationCommands" | "verificationResults" | "commandResults"
+> {
+  const verificationReceipt = parseValueSection(section);
+  if (!verificationReceipt) return {};
+
+  try {
+    const parsed: unknown = JSON.parse(verificationReceipt);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("expected a JSON object");
+    }
+
+    const receipt = parsed as Record<string, unknown>;
+    const rawCommands = Array.isArray(receipt.commands_run) ? receipt.commands_run : [];
+    const commandResults = rawCommands.flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const commandReceipt = entry as Record<string, unknown>;
+      if (typeof commandReceipt.command !== "string") return [];
+      const ok = typeof commandReceipt.ok === "boolean"
+        ? commandReceipt.ok
+        : typeof commandReceipt.exit_code === "number"
+          ? commandReceipt.exit_code === 0
+          : undefined;
+      return [{
+        command: commandReceipt.command,
+        status: ok === undefined ? undefined : ok ? "passed" : "failed",
+        result: typeof commandReceipt.exit_code === "number"
+          ? `exit code ${commandReceipt.exit_code}`
+          : undefined,
+      }];
+    });
+    const ok = typeof receipt.ok === "boolean" ? receipt.ok : undefined;
+
+    if (ok === undefined && commandResults.length === 0) {
+      throw new Error("expected an ok field or commands_run receipts");
+    }
+
+    return {
+      verificationReceipt,
+      verificationCommands: commandResults.map((entry) => entry.command),
+      verificationResults: ok === undefined ? undefined : [ok ? "passed" : "failed"],
+      commandResults,
+    };
+  } catch (error) {
+    return {
+      verificationReceipt,
+      verificationReceiptParseError: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function parseRunLogEvidence(content: string | undefined): ReviewReadinessRunLog[] {
   if (!content) {
     return [];
   }
 
+  const testsRun = parseRunLogListSection(extractRunLogSection(content, "Tests Run"));
+  const commandsRun = parseRunLogListSection(extractRunLogSection(content, "Commands Run"));
+  const verification = parseVerificationReceipt(extractRunLogSection(content, "Verification Receipt"));
+  const textCommandResults = [...commandsRun, ...testsRun]
+    .map(parseCommandReceipt)
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
+
   return [{
     filesChanged: parseRunLogListSection(extractRunLogSection(content, "Files Changed")),
-    testsRun: parseRunLogListSection(extractRunLogSection(content, "Tests Run")),
-    commandsRun: parseRunLogListSection(extractRunLogSection(content, "Commands Run")),
+    testsRun,
+    commandsRun,
+    ...verification,
+    commandResults: [...textCommandResults, ...(verification.commandResults ?? [])],
     decisionsMade: parseRunLogListSection(extractRunLogSection(content, "Decisions Made")),
     result: parseValueSection(extractRunLogSection(content, "Result")),
     risks: parseValueSection(extractRunLogSection(content, "Risks")),

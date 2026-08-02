@@ -22,7 +22,7 @@ so returned task data, run logs, and verification operate on this checkout.
 <available_skills>
   <skill>
     <name>manciple-review</name>
-    <description>Review completed Manciple task work by loading the task packet, checking review readiness with manciple_verify --profile review, evaluating acceptance criteria against run log and git diff evidence, and recording a deterministic verdict (approve/request-changes/block). Use when the user asks Codex to review, approve, or give feedback on a completed Manciple task.</description>
+    <description>Review completed Manciple task work by loading the task packet, running the task-specific deterministic review gate, evaluating acceptance criteria against run log and git diff evidence, and recording a verdict (approve/request-changes/block). Use when the user asks Codex to review, approve, or give feedback on a completed Manciple task.</description>
     <location>file:///Users/danielpatton/Documents/GitHub/promptops/.codex/skills/manciple-review/SKILL.md</location>
   </skill>
 </available_skills>

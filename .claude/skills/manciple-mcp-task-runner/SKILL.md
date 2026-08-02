@@ -38,6 +38,7 @@ Once a task is selected, obey the task spec exactly. Do not expand or shrink `al
 
 5. Finish.
    - Call `manciple_run_log` after implementation and verification. Include final task status, files changed, non-test commands in `commands_run`, test commands or receipts in `tests_run`, the deterministic verify receipt, acceptance criteria evidence, result, notes, and residual risks.
+   - Format each acceptance evidence line as `<exact criterion text> => <evidence>`. Do not paraphrase the criterion on the left side; deterministic review uses the exact task text as the mapping key.
    - For completed implementation work that changed behavior, include `Decisions Made`; omit it only when the task was blocked before meaningful changes.
    - Call `manciple_validate` before final status updates when task specs may have changed or the assignment requests metadata validation.
    - Set status with `manciple_set_status`:

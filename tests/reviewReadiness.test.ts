@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { buildRunLog } from "../src/commands/runLog.js";
+import { parseRunLogEvidence } from "../src/review/evidence.js";
 import { evaluateReviewReadiness } from "../src/review/readiness.js";
 import type { TaskSpec } from "../src/specs/schema.js";
 
@@ -271,5 +273,159 @@ describe("evaluateReviewReadiness", () => {
       passed: true,
       reason: "no over-budget token estimate",
     }));
+  });
+
+  it("accepts human-readable command receipts and mapped acceptance evidence", () => {
+    const report = evaluateReviewReadiness(task, {
+      runLogs: [{
+        filesChanged: ["src/review/readiness.ts", "tests/reviewReadiness.test.ts"],
+        commandsRun: ["pnpm build => PASS"],
+        testsRun: ["pnpm test: passed (10 tests)"],
+        decisionsMade: ["Kept review receipts readable for human reviewers."],
+        result: "complete",
+        risks: "No known residual readiness-scope risks.",
+        followUps: ["none"],
+        acceptanceCriteriaEvidence: [{
+          criterion: "Readiness can be evaluated.",
+          evidence: "Focused tests exercise the readiness contract and pass.",
+        }],
+      }],
+    });
+
+    expect(report.ready).toBe(true);
+    expect(report.score).toBe(100);
+    expect(report.missingVerificationCommands).toEqual([]);
+    expect(report.missingReceiptFields).toEqual([]);
+    expect(report.uncoveredAcceptanceCriteria).toEqual([]);
+    expect(report.documentedRisks).toEqual([]);
+  });
+
+  it("does not let unrelated evidence or a no-risk prefix hide review gaps", () => {
+    const report = evaluateReviewReadiness(task, {
+      runLogs: [{
+        filesChanged: ["src/review/readiness.ts"],
+        testsRun: ["pnpm build: passed", "pnpm test: passed"],
+        result: "complete",
+        decisionsMade: ["Recorded the available evidence."],
+        risks: "No known code risks. Browser validation was not performed.",
+        followUps: ["none"],
+        acceptanceCriteriaEvidence: [{
+          criterion: "A different claim was exercised.",
+        }],
+      }],
+    });
+
+    expect(report.ready).toBe(false);
+    expect(report.uncoveredAcceptanceCriteria).toEqual(["Readiness can be evaluated."]);
+    expect(report.unmappedAcceptanceEvidence).toEqual(["A different claim was exercised."]);
+    expect(report.documentedRisks).toEqual([
+      "No known code risks. Browser validation was not performed.",
+    ]);
+    expect(report.missingEvidence).toContain(
+      "Acceptance evidence is present but not mapped to task criteria; uncovered criteria: Readiness can be evaluated."
+    );
+  });
+
+  it("round-trips command, acceptance, and verification receipts through markdown", () => {
+    const content = buildRunLog(
+      task.title,
+      task.id,
+      task.status,
+      ".manciple/prompts/generated",
+      process.cwd(),
+      {
+        result: "complete",
+        filesChanged: ["src/review/readiness.ts", "tests/reviewReadiness.test.ts"],
+        testsRun: ["pnpm build: passed", "pnpm test: passed (258 tests)"],
+        decisionsMade: ["Kept review evidence structured."],
+        risks: "No known residual risks.",
+        followUps: ["none"],
+        acceptanceCriteriaEvidence: [
+          "Readiness can be evaluated. => Round-trip coverage exercises the rendered receipt.",
+        ],
+        verifyReceipt: JSON.stringify({
+          ok: true,
+          profile: "worker",
+          commands_run: [
+            { command: "pnpm build", exit_code: 0, ok: true },
+            { command: "pnpm test", exit_code: 0, ok: true },
+          ],
+          failures: [],
+        }),
+      }
+    );
+
+    const runLogs = parseRunLogEvidence(content);
+    const report = evaluateReviewReadiness(task, { runLogs });
+
+    expect(runLogs[0].verificationResults).toEqual(["passed"]);
+    expect(runLogs[0].commandResults).toEqual(expect.arrayContaining([
+      expect.objectContaining({ command: "pnpm build", status: "passed" }),
+      expect.objectContaining({ command: "pnpm test", status: "passed" }),
+    ]));
+    expect(report.ready).toBe(true);
+    expect(report.missingEvidence).toEqual([]);
+  });
+
+  it("uses the final outcome when a receipt records a successful rerun", () => {
+    const content = buildRunLog(
+      task.title,
+      task.id,
+      task.status,
+      ".manciple/prompts/generated",
+      process.cwd(),
+      {
+        result: "complete",
+        filesChanged: ["src/review/readiness.ts"],
+        testsRun: [
+          "pnpm build: failed in sandbox, rerun outside sandbox passed",
+          "pnpm test: passed",
+        ],
+        decisionsMade: ["Recorded the successful rerun."],
+        risks: "none",
+        followUps: ["none"],
+        acceptanceCriteriaEvidence: [
+          "Readiness can be evaluated. => Covered by the successful rerun.",
+        ],
+      }
+    );
+
+    const report = evaluateReviewReadiness(task, {
+      runLogs: parseRunLogEvidence(content),
+    });
+
+    expect(report.failedVerificationCommands).toEqual([]);
+    expect(report.ready).toBe(true);
+  });
+
+  it("reports a malformed verification receipt instead of silently dropping it", () => {
+    const content = buildRunLog(
+      task.title,
+      task.id,
+      task.status,
+      ".manciple/prompts/generated",
+      process.cwd(),
+      {
+        result: "complete",
+        filesChanged: ["src/review/readiness.ts"],
+        testsRun: ["pnpm build: passed", "pnpm test: passed"],
+        decisionsMade: ["Recorded verification evidence."],
+        risks: "none",
+        followUps: ["none"],
+        acceptanceCriteriaEvidence: [
+          "Readiness can be evaluated. => Covered by the readiness test.",
+        ],
+        verifyReceipt: "not-json",
+      }
+    );
+
+    const report = evaluateReviewReadiness(task, {
+      runLogs: parseRunLogEvidence(content),
+    });
+
+    expect(report.ready).toBe(false);
+    expect(report.missingEvidence.some((entry) => (
+      entry.startsWith("Verification receipt is not parseable:") && entry.includes("not-json")
+    ))).toBe(true);
   });
 });
