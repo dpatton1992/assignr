@@ -1,23 +1,32 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { mkdtemp } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { afterEach, describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { listTasksForMcp } from "../src/mcpList.js";
-import { getPaths } from "../src/utils/paths.js";
 import type { TaskTier } from "../src/specs/loadTasks.js";
+import { getPaths } from "../src/utils/paths.js";
 
 const tempDirs: string[] = [];
+
+type TextContentPart = { type: string; text?: string };
+
+function textOf(result: unknown): string {
+  const content = (result as { content?: TextContentPart[] }).content;
+  const text = content?.find((part) => part.type === "text")?.text;
+  expect(text).toBeDefined();
+  return text ?? "";
+}
 
 function writeTask(
   root: string,
   tier: TaskTier,
   id: string,
   status = "pending",
-  implementationNotes: string[] = []
+  implementationNotes: string[] = [],
 ): void {
   const implementationNoteLines =
     implementationNotes.length > 0
@@ -56,7 +65,7 @@ function writeTask(
       "notes: []",
       "",
     ].join("\n"),
-    "utf-8"
+    "utf-8",
   );
 }
 
@@ -124,9 +133,7 @@ describe("listTasksForMcp", () => {
 
     const tasks = listTasksForMcp(paths.specsTasks, root, { status: "complete" });
 
-    expect(tasks.map((task) => [task.id, task.tier])).toEqual([
-      ["completed-task", "completed"],
-    ]);
+    expect(tasks.map((task) => [task.id, task.tier])).toEqual([["completed-task", "completed"]]);
   });
 
   it("can list every lifecycle tier with status=all", async () => {
@@ -185,7 +192,7 @@ describe("listTasksForMcp", () => {
         "notes: []",
         "",
       ].join("\n"),
-      "utf-8"
+      "utf-8",
     );
     writeFileSync(
       join(paths.tasksActive, "target-task.yaml"),
@@ -215,14 +222,14 @@ describe("listTasksForMcp", () => {
         "notes: []",
         "",
       ].join("\n"),
-      "utf-8"
+      "utf-8",
     );
 
     const tsxBin = join(
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,
@@ -238,9 +245,8 @@ describe("listTasksForMcp", () => {
     });
     await client.close();
 
-    const text = result.content.find((part) => part.type === "text")?.text;
-    expect(text).toBeDefined();
-    const payload = JSON.parse(text!);
+    const text = textOf(result);
+    const payload = JSON.parse(text);
     const warnings = payload.path_ownership_warnings;
 
     expect(payload.content).toContain("## Domain Context");
@@ -265,7 +271,7 @@ describe("listTasksForMcp", () => {
           affected_path: "src/specs/loadTasks.ts",
           owner_path: "src/specs/",
         },
-      ])
+      ]),
     );
     expect(existsSync(join(paths.promptsGenerated, "target-task.md"))).toBe(true);
   });
@@ -303,14 +309,14 @@ describe("listTasksForMcp", () => {
         "notes: []",
         "",
       ].join("\n"),
-      "utf-8"
+      "utf-8",
     );
 
     const tsxBin = join(
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,
@@ -334,14 +340,16 @@ describe("listTasksForMcp", () => {
     });
     await client.close();
 
-    const text = result.content.find((part) => part.type === "text")?.text;
-    expect(text).toBeDefined();
-    expect(JSON.parse(text!)).toMatchObject({
+    const text = textOf(result);
+    expect(JSON.parse(text)).toMatchObject({
       id: "mcp-design-contract",
       file_path: ".manciple/tasks/active/mcp-design-contract.yaml",
     });
-    const raw = readFileSync(join(root, ".manciple", "tasks", "active", "mcp-design-contract.yaml"), "utf-8");
-    expect((parse(raw) as Record<string, unknown>)["implementation_notes"]).toEqual([
+    const raw = readFileSync(
+      join(root, ".manciple", "tasks", "active", "mcp-design-contract.yaml"),
+      "utf-8",
+    );
+    expect((parse(raw) as Record<string, unknown>).implementation_notes).toEqual([
       "Preserve CLI and MCP parity.",
     ]);
   });
@@ -355,7 +363,7 @@ describe("listTasksForMcp", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,
@@ -371,9 +379,8 @@ describe("listTasksForMcp", () => {
     });
     await client.close();
 
-    const text = result.content.find((part) => part.type === "text")?.text;
-    expect(text).toBeDefined();
-    expect(JSON.parse(text!)).toEqual({
+    const text = textOf(result);
+    expect(JSON.parse(text)).toEqual({
       checked: true,
       changed: false,
       file: ".manciple/tasks/active/format-task.yaml",
@@ -394,7 +401,7 @@ describe("listTasksForMcp", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,
@@ -410,9 +417,8 @@ describe("listTasksForMcp", () => {
     });
     await client.close();
 
-    const text = result.content.find((part) => part.type === "text")?.text;
-    expect(text).toBeDefined();
-    const payload = JSON.parse(text!);
+    const text = textOf(result);
+    const payload = JSON.parse(text);
 
     expect(payload).toMatchObject({
       valid_count: 2,
@@ -435,7 +441,7 @@ describe("listTasksForMcp", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,
@@ -463,12 +469,13 @@ describe("listTasksForMcp", () => {
     });
     await client.close();
 
-    const text = result.content.find((part) => part.type === "text")?.text;
-    expect(text).toBeDefined();
-    const payload = JSON.parse(text!);
+    const text = textOf(result);
+    const payload = JSON.parse(text);
     expect(existsSync(payload.path)).toBe(true);
 
-    const files = readdirSync(paths.runs).filter((file) => file.endsWith(".md")).sort();
+    const files = readdirSync(paths.runs)
+      .filter((file) => file.endsWith(".md"))
+      .sort();
     const content = readFileSync(join(paths.runs, files.at(-1) ?? ""), "utf-8");
 
     expect(content).toContain("- Status: needs_review");
@@ -485,7 +492,7 @@ describe("listTasksForMcp", () => {
   it("exposes the deterministic dispatch plan over MCP", async () => {
     const root = await mkdtemp(join(tmpdir(), "manciple-mcp-dispatch-"));
     tempDirs.push(root);
-    const paths = getPaths(root, ".manciple");
+    const _paths = getPaths(root, ".manciple");
     writeTask(root, "active", "ready-task");
     writeTask(root, "active", "blocked-task", "blocked");
 
@@ -493,7 +500,7 @@ describe("listTasksForMcp", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,
@@ -509,9 +516,8 @@ describe("listTasksForMcp", () => {
     });
     await client.close();
 
-    const text = result.content.find((part) => part.type === "text")?.text;
-    expect(text).toBeDefined();
-    const payload = JSON.parse(text!);
+    const text = textOf(result);
+    const payload = JSON.parse(text);
 
     expect(payload).toMatchObject({
       worker_cap: 1,
@@ -549,7 +555,7 @@ describe("listTasksForMcp", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,
@@ -565,9 +571,8 @@ describe("listTasksForMcp", () => {
     });
     await client.close();
 
-    const text = result.content.find((part) => part.type === "text")?.text;
-    expect(text).toBeDefined();
-    const payload = JSON.parse(text!);
+    const text = textOf(result);
+    const payload = JSON.parse(text);
 
     expect(payload).toMatchObject({
       ok: false,
@@ -605,7 +610,7 @@ describe("listTasksForMcp", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,
@@ -625,13 +630,11 @@ describe("listTasksForMcp", () => {
     });
     await client.close();
 
-    const defaultText = defaultResult.content.find((part) => part.type === "text")?.text;
-    const scopedText = scopedResult.content.find((part) => part.type === "text")?.text;
-    expect(defaultText).toBeDefined();
-    expect(scopedText).toBeDefined();
+    const defaultText = textOf(defaultResult);
+    const scopedText = textOf(scopedResult);
 
-    expect(JSON.parse(defaultText!).map((task: { id: string }) => task.id)).toEqual(["server-task"]);
-    expect(JSON.parse(scopedText!).map((task: { id: string }) => task.id)).toEqual(["target-task"]);
+    expect(JSON.parse(defaultText).map((task: { id: string }) => task.id)).toEqual(["server-task"]);
+    expect(JSON.parse(scopedText).map((task: { id: string }) => task.id)).toEqual(["target-task"]);
   });
 
   it("scopes MCP write calls to the repo argument instead of the server cwd", async () => {
@@ -643,7 +646,7 @@ describe("listTasksForMcp", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,
@@ -667,14 +670,17 @@ describe("listTasksForMcp", () => {
     });
     await client.close();
 
-    const text = result.content.find((part) => part.type === "text")?.text;
-    expect(text).toBeDefined();
-    expect(JSON.parse(text!)).toMatchObject({
+    const text = textOf(result);
+    expect(JSON.parse(text)).toMatchObject({
       id: "scoped-mcp-task",
       file_path: ".manciple/tasks/active/scoped-mcp-task.yaml",
     });
-    expect(existsSync(join(targetRoot, ".manciple", "tasks", "active", "scoped-mcp-task.yaml"))).toBe(true);
-    expect(existsSync(join(serverRoot, ".manciple", "tasks", "active", "scoped-mcp-task.yaml"))).toBe(false);
+    expect(
+      existsSync(join(targetRoot, ".manciple", "tasks", "active", "scoped-mcp-task.yaml")),
+    ).toBe(true);
+    expect(
+      existsSync(join(serverRoot, ".manciple", "tasks", "active", "scoped-mcp-task.yaml")),
+    ).toBe(false);
   });
 
   it("reports the package.json version in the MCP initialize handshake (no stale hard-coded version)", async () => {
@@ -685,7 +691,7 @@ describe("listTasksForMcp", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
     const transport = new StdioClientTransport({
       command: tsxBin,

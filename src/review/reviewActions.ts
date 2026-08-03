@@ -6,16 +6,21 @@ import {
   renameSync,
   unlinkSync,
   writeFileSync,
-} from "fs";
-import { basename, dirname, join } from "path";
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { parse } from "yaml";
-import { loadTasks } from "../specs/loadTasks.js";
 import type { LoadedTaskWithTier, TaskTier } from "../specs/loadTasks.js";
+import { loadTasks } from "../specs/loadTasks.js";
 import { formatYamlDocument } from "../utils/yamlFormat.js";
-import { evaluateDeterministicReviewGate } from "./deterministicGate.js";
-import { integrateManagedWorktree } from "../worktrees/integration.js";
-import { getManagedWorktree, isGitRepository, removeManagedWorktree, setManagedWorktreeState } from "../worktrees/manager.js";
 import type { WorktreeIntegrationResult } from "../worktrees/integration.js";
+import { integrateManagedWorktree } from "../worktrees/integration.js";
+import {
+  getManagedWorktree,
+  isGitRepository,
+  removeManagedWorktree,
+  setManagedWorktreeState,
+} from "../worktrees/manager.js";
+import { evaluateDeterministicReviewGate } from "./deterministicGate.js";
 
 /**
  * Shared durable review-outcome action layer.
@@ -67,7 +72,7 @@ function outcomeTimestamp(): string {
 }
 
 function rel(cwd: string, path: string): string {
-  return path.replace(cwd + "/", "");
+  return path.replace(`${cwd}/`, "");
 }
 
 function moveTaskFile(source: string, destination: string): void {
@@ -87,17 +92,17 @@ function moveTaskFile(source: string, destination: string): void {
 function updateTaskStatus(filePath: string, status: string): void {
   const raw = readFileSync(filePath, "utf-8");
   const parsed = parse(raw) as Record<string, unknown>;
-  parsed["status"] = status;
+  parsed.status = status;
   writeFileSync(filePath, formatYamlDocument(parsed), "utf-8");
 }
 
 function writeReviewOutcome(
   task: LoadedTaskWithTier,
   runsDir: string,
-  cwd: string,
+  _cwd: string,
   outcome: ReviewOutcome,
   nextStatus: string,
-  reason?: string
+  reason?: string,
 ): string {
   mkdirSync(runsDir, { recursive: true });
   const outPath = join(runsDir, `${outcomeTimestamp()}-${task.spec.id}-review-outcome.md`);
@@ -133,7 +138,10 @@ function requireRunsDir(options: ReviewActionOptions): string {
   return options.runsDir;
 }
 
-function findActiveNeedsReviewTask(taskId: string, options: ReviewActionOptions): LoadedTaskWithTier {
+function findActiveNeedsReviewTask(
+  taskId: string,
+  options: ReviewActionOptions,
+): LoadedTaskWithTier {
   const { tasks } = loadTasks(options.specsTasksDir, "all");
   const found = tasks.find((task) => task.spec.id === taskId);
 
@@ -143,12 +151,14 @@ function findActiveNeedsReviewTask(taskId: string, options: ReviewActionOptions)
 
   if (found.spec.status !== "needs_review") {
     throw new ReviewActionError(
-      `Task ${taskId} is not ready for review outcome: expected needs_review, found ${found.spec.status}.`
+      `Task ${taskId} is not ready for review outcome: expected needs_review, found ${found.spec.status}.`,
     );
   }
 
   if (found.tier !== "active") {
-    throw new ReviewActionError(`Task ${taskId} must be in active tasks to record a review outcome.`);
+    throw new ReviewActionError(
+      `Task ${taskId} must be in active tasks to record a review outcome.`,
+    );
   }
 
   return found;
@@ -224,7 +234,9 @@ export function approveTask(taskId: string, options: ReviewActionOptions): Revie
   const destination = join(options.completedDir, `${taskId}.yaml`);
 
   if (existsSync(destination)) {
-    throw new ReviewActionError(`Task ${taskId} already exists in completed. Use manciple reopen first.`);
+    throw new ReviewActionError(
+      `Task ${taskId} already exists in completed. Use manciple reopen first.`,
+    );
   }
 
   const runsDir = requireRunsDir(options);
@@ -246,7 +258,12 @@ export function approveTask(taskId: string, options: ReviewActionOptions): Revie
       removeManagedWorktree(taskId, { ...worktreeOptions, deleteBranch: true });
     } catch (error) {
       cleanupWarnings.push(error instanceof Error ? error.message : String(error));
-      setManagedWorktreeState(taskId, "integrated_pending_completion", worktreeOptions, integration.integratedSha);
+      setManagedWorktreeState(
+        taskId,
+        "integrated_pending_completion",
+        worktreeOptions,
+        integration.integratedSha,
+      );
     }
   }
 
@@ -265,7 +282,7 @@ export function approveTask(taskId: string, options: ReviewActionOptions): Revie
 export function requestChanges(
   taskId: string,
   reason: string,
-  options: ReviewActionOptions
+  options: ReviewActionOptions,
 ): ReviewActionResult {
   requireReason(reason);
   const found = findActiveNeedsReviewTask(taskId, options);
@@ -276,7 +293,7 @@ export function requestChanges(
     options.cwd,
     "changes_requested",
     "in_progress",
-    reason
+    reason,
   );
   updateTaskStatus(found.filePath, "in_progress");
   updateManagedStateQuietly(taskId, "available", options);
@@ -291,7 +308,11 @@ export function requestChanges(
   };
 }
 
-export function rejectTask(taskId: string, reason: string, options: ReviewActionOptions): ReviewActionResult {
+export function rejectTask(
+  taskId: string,
+  reason: string,
+  options: ReviewActionOptions,
+): ReviewActionResult {
   requireReason(reason);
   const found = findActiveNeedsReviewTask(taskId, options);
   const runsDir = requireRunsDir(options);
@@ -312,7 +333,7 @@ export function rejectTask(taskId: string, reason: string, options: ReviewAction
 export function blockReview(
   taskId: string,
   reason: string,
-  options: ReviewActionOptions
+  options: ReviewActionOptions,
 ): ReviewActionResult {
   requireReason(reason);
   const found = findActiveNeedsReviewTask(taskId, options);
@@ -352,7 +373,7 @@ export function reopenTask(taskId: string, options: ReviewActionOptions): Review
 
   const raw = readFileSync(found.filePath, "utf-8");
   const parsed = parse(raw) as Record<string, unknown>;
-  parsed["status"] = "in_progress";
+  parsed.status = "in_progress";
 
   mkdirSync(options.activeDir, { recursive: true });
   writeFileSync(found.filePath, formatYamlDocument(parsed), "utf-8");

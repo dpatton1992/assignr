@@ -17,18 +17,14 @@ generated output.`);
   process.exit(args.length === 0 ? 1 : 0);
 }
 
-const result = spawnSync(
-  process.execPath,
-  [tsxCli, "src/cli.ts", "token-estimate", ...args],
-  {
-    cwd: repoRoot,
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      npm_config_offline: process.env.npm_config_offline ?? "true",
-    },
+const result = spawnSync(process.execPath, [tsxCli, "src/cli.ts", "token-estimate", ...args], {
+  cwd: repoRoot,
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    npm_config_offline: process.env.npm_config_offline ?? "true",
   },
-);
+});
 
 if (result.error) {
   console.error(`manciple-token-audit failed to start token-estimate: ${result.error.message}`);

@@ -7,10 +7,10 @@ import {
   renameSync,
   statSync,
   writeFileSync,
-} from "fs";
-import { join, relative } from "path";
-import { createInterface } from "readline/promises";
-import { stdin as input, stdout as output } from "process";
+} from "node:fs";
+import { join } from "node:path";
+import { stdin as input, stdout as output } from "node:process";
+import { createInterface } from "node:readline/promises";
 import picocolors from "picocolors";
 
 interface MigrationAction {
@@ -26,7 +26,7 @@ export interface MigrateAssignrCommandOptions {
 }
 
 function relativePath(cwd: string, filePath: string): string {
-  return filePath.startsWith(cwd + "/") ? filePath.slice(cwd.length + 1) : filePath;
+  return filePath.startsWith(`${cwd}/`) ? filePath.slice(cwd.length + 1) : filePath;
 }
 
 function replaceText(value: string): string {
@@ -191,16 +191,28 @@ function buildPlan(cwd: string): MigrationAction[] {
   const textFiles: Array<{ labelPath: string; sourcePath: string; targetPath: string }> = [
     {
       labelPath: join(mancipleRoot, "config.yaml"),
-      sourcePath: existsSync(join(mancipleRoot, "config.yaml")) ? join(mancipleRoot, "config.yaml") : join(assignrRoot, "config.yaml"),
+      sourcePath: existsSync(join(mancipleRoot, "config.yaml"))
+        ? join(mancipleRoot, "config.yaml")
+        : join(assignrRoot, "config.yaml"),
       targetPath: join(mancipleRoot, "config.yaml"),
     },
     {
       labelPath: join(mancipleRoot, "commands", "README.md"),
-      sourcePath: existsSync(join(mancipleRoot, "commands", "README.md")) ? join(mancipleRoot, "commands", "README.md") : join(assignrRoot, "commands", "README.md"),
+      sourcePath: existsSync(join(mancipleRoot, "commands", "README.md"))
+        ? join(mancipleRoot, "commands", "README.md")
+        : join(assignrRoot, "commands", "README.md"),
       targetPath: join(mancipleRoot, "commands", "README.md"),
     },
-    { labelPath: join(cwd, ".gitignore"), sourcePath: join(cwd, ".gitignore"), targetPath: join(cwd, ".gitignore") },
-    { labelPath: join(cwd, "AGENTS.md"), sourcePath: join(cwd, "AGENTS.md"), targetPath: join(cwd, "AGENTS.md") },
+    {
+      labelPath: join(cwd, ".gitignore"),
+      sourcePath: join(cwd, ".gitignore"),
+      targetPath: join(cwd, ".gitignore"),
+    },
+    {
+      labelPath: join(cwd, "AGENTS.md"),
+      sourcePath: join(cwd, "AGENTS.md"),
+      targetPath: join(cwd, "AGENTS.md"),
+    },
   ];
 
   for (const { labelPath, sourcePath, targetPath } of textFiles) {
@@ -262,7 +274,7 @@ export async function migrateAssignrCommand(options: MigrateAssignrCommandOption
     return;
   }
 
-  const confirmed = yes || await (options.confirm ?? confirmMigration)();
+  const confirmed = yes || (await (options.confirm ?? confirmMigration)());
   if (!confirmed) {
     console.log("Migration cancelled.");
     return;
@@ -273,6 +285,10 @@ export async function migrateAssignrCommand(options: MigrateAssignrCommandOption
   }
 
   console.log(`\n${picocolors.green("✓")} Migrated Assignr artifacts to Manciple.`);
-  console.log(`  ${picocolors.dim("Run")} ${picocolors.cyan("manciple install-assets --force")} ${picocolors.dim("to refresh packaged agent assets.")}`);
-  console.log(`  ${picocolors.dim("Run")} ${picocolors.cyan("manciple mcp-config --force")} ${picocolors.dim("if your MCP client needs regenerated config.")}`);
+  console.log(
+    `  ${picocolors.dim("Run")} ${picocolors.cyan("manciple install-assets --force")} ${picocolors.dim("to refresh packaged agent assets.")}`,
+  );
+  console.log(
+    `  ${picocolors.dim("Run")} ${picocolors.cyan("manciple mcp-config --force")} ${picocolors.dim("if your MCP client needs regenerated config.")}`,
+  );
 }

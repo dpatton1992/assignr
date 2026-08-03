@@ -1,8 +1,8 @@
-import { loadTasks } from "../specs/loadTasks.js";
-import { buildCoordinatorQueue } from "../coordination/reviewQueue.js";
-import type { CoordinatorQueueRow } from "../coordination/reviewQueue.js";
-import { colorForStatus, styleCell, statusSymbol } from "../utils/styling.js";
 import picocolors from "picocolors";
+import type { CoordinatorQueueRow } from "../coordination/reviewQueue.js";
+import { buildCoordinatorQueue } from "../coordination/reviewQueue.js";
+import { loadTasks } from "../specs/loadTasks.js";
+import { colorForStatus, styleCell } from "../utils/styling.js";
 
 function pad(value: string, width: number): string {
   return value.padEnd(width);
@@ -47,12 +47,12 @@ function printSection(label: string, rows: CoordinatorQueueRow[]): void {
   const priorityWidth = Math.max("PRIORITY".length, ...rows.map((item) => item.priority.length));
 
   console.log(
-    `  ${styleCell("ID", undefined, idWidth)}  ${styleCell("STATUS", undefined, statusWidth)}  ${styleCell("PRIORITY", undefined, priorityWidth)}  REASON`
+    `  ${styleCell("ID", undefined, idWidth)}  ${styleCell("STATUS", undefined, statusWidth)}  ${styleCell("PRIORITY", undefined, priorityWidth)}  REASON`,
   );
   for (const row of rows) {
     const coloredStatus = colorForStatus(row.status)(pad(row.status, statusWidth));
     console.log(
-      `  ${pad(row.id, idWidth)}  ${coloredStatus}  ${pad(row.priority, priorityWidth)}  ${truncate(row.reason, 96)}`
+      `  ${pad(row.id, idWidth)}  ${coloredStatus}  ${pad(row.priority, priorityWidth)}  ${truncate(row.reason, 96)}`,
     );
   }
 }
@@ -66,7 +66,7 @@ export function coordinatorCommand(
 
   if (errors.length > 0) {
     console.warn(
-      `  Warning: ${errors.length} task file(s) could not be loaded (run "manciple validate" for details).`
+      `  Warning: ${errors.length} task file(s) could not be loaded (run "manciple validate" for details).`,
     );
   }
 

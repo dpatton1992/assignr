@@ -1,6 +1,6 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
-import { spawnSync } from "child_process";
-import { join } from "path";
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ReviewReadinessAcceptanceEvidence, ReviewReadinessRunLog } from "./readiness.js";
 
 /**
@@ -101,11 +101,9 @@ export function markRunLogSuperseded(filePath: string, supersedingFilename: stri
   }
 
   if (metaHeaderIndex >= 0 && metaEndIndex > metaHeaderIndex) {
-    const updated = [
-      ...lines.slice(0, metaEndIndex),
-      marker,
-      ...lines.slice(metaEndIndex),
-    ].join("\n");
+    const updated = [...lines.slice(0, metaEndIndex), marker, ...lines.slice(metaEndIndex)].join(
+      "\n",
+    );
     writeFileSync(filePath, updated, "utf-8");
   }
 }
@@ -137,17 +135,22 @@ export function readLatestRunLogContent(cwd: string, taskId: string): string | u
 function commandLines(cwd: string, args: string[]): string[] {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
   if (result.error || result.status !== 0) return [];
-  return result.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 export function readGitChangedFiles(cwd: string, baseSha?: string): string[] {
   if (baseSha) {
-    return [...new Set([
-      ...commandLines(cwd, ["diff", "--name-only", `${baseSha}...HEAD`]),
-      ...commandLines(cwd, ["diff", "--name-only"]),
-      ...commandLines(cwd, ["diff", "--cached", "--name-only"]),
-      ...commandLines(cwd, ["ls-files", "--others", "--exclude-standard"]),
-    ])].sort();
+    return [
+      ...new Set([
+        ...commandLines(cwd, ["diff", "--name-only", `${baseSha}...HEAD`]),
+        ...commandLines(cwd, ["diff", "--name-only"]),
+        ...commandLines(cwd, ["diff", "--cached", "--name-only"]),
+        ...commandLines(cwd, ["ls-files", "--others", "--exclude-standard"]),
+      ]),
+    ].sort();
   }
 
   const result = spawnSync("git", ["status", "--short", "--untracked-files=all"], {
@@ -162,7 +165,7 @@ export function readGitChangedFiles(cwd: string, baseSha?: string): string[] {
     .map((line) => line.slice(3).trim())
     .map((path) => {
       const renameMarker = " -> ";
-      return path.includes(renameMarker) ? path.split(renameMarker).pop() ?? path : path;
+      return path.includes(renameMarker) ? (path.split(renameMarker).pop() ?? path) : path;
     })
     .filter(Boolean);
 }
@@ -203,20 +206,24 @@ function parseValueSection(section: string): string | undefined {
 }
 
 function parseAcceptanceEvidence(section: string): ReviewReadinessAcceptanceEvidence[] {
-  return parseRunLogListSection(section).map((line) => {
-    const separator = line.includes("=>") ? "=>" : ":";
-    const [criterion, ...evidenceParts] = line.split(separator);
-    return {
-      criterion: criterion.trim(),
-      evidence: evidenceParts.join(separator).trim() || undefined,
-    };
-  }).filter((entry) => entry.criterion);
+  return parseRunLogListSection(section)
+    .map((line) => {
+      const separator = line.includes("=>") ? "=>" : ":";
+      const [criterion, ...evidenceParts] = line.split(separator);
+      return {
+        criterion: criterion.trim(),
+        evidence: evidenceParts.join(separator).trim() || undefined,
+      };
+    })
+    .filter((entry) => entry.criterion);
 }
 
 function verificationOutcome(value: string): "passed" | "failed" | undefined {
-  const outcomes = [...value.matchAll(
-    /\b(pass(?:ed|ing)?|ok|success(?:ful)?|fail(?:ed|ing)?|error|non[- ]?zero|exit(?:ed)?\s+(?:code\s+)?\d+)\b/gi
-  )];
+  const outcomes = [
+    ...value.matchAll(
+      /\b(pass(?:ed|ing)?|ok|success(?:ful)?|fail(?:ed|ing)?|error|non[- ]?zero|exit(?:ed)?\s+(?:code\s+)?\d+)\b/gi,
+    ),
+  ];
   const last = outcomes.at(-1)?.[1]?.toLowerCase();
   if (!last) return undefined;
   if (/^(?:pass|ok|success)/.test(last)) return "passed";
@@ -225,7 +232,7 @@ function verificationOutcome(value: string): "passed" | "failed" | undefined {
 }
 
 function parseCommandReceipt(
-  line: string
+  line: string,
 ): NonNullable<ReviewReadinessRunLog["commandResults"]>[number] | undefined {
   const separated = line.match(/^(.*)(?::\s*|\s+(?:->|=>|[-–—])\s+)(.+)$/);
   const parenthesized = line.match(/^(.*?)\s+\((.+)\)$/);
@@ -238,9 +245,15 @@ function parseCommandReceipt(
   return { command: command.trim(), result: result.trim(), status };
 }
 
-function parseVerificationReceipt(section: string): Pick<
+function parseVerificationReceipt(
+  section: string,
+): Pick<
   ReviewReadinessRunLog,
-  "verificationReceipt" | "verificationReceiptParseError" | "verificationCommands" | "verificationResults" | "commandResults"
+  | "verificationReceipt"
+  | "verificationReceiptParseError"
+  | "verificationCommands"
+  | "verificationResults"
+  | "commandResults"
 > {
   const verificationReceipt = parseValueSection(section);
   if (!verificationReceipt) return {};
@@ -257,18 +270,22 @@ function parseVerificationReceipt(section: string): Pick<
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
       const commandReceipt = entry as Record<string, unknown>;
       if (typeof commandReceipt.command !== "string") return [];
-      const ok = typeof commandReceipt.ok === "boolean"
-        ? commandReceipt.ok
-        : typeof commandReceipt.exit_code === "number"
-          ? commandReceipt.exit_code === 0
-          : undefined;
-      return [{
-        command: commandReceipt.command,
-        status: ok === undefined ? undefined : ok ? "passed" : "failed",
-        result: typeof commandReceipt.exit_code === "number"
-          ? `exit code ${commandReceipt.exit_code}`
-          : undefined,
-      }];
+      const ok =
+        typeof commandReceipt.ok === "boolean"
+          ? commandReceipt.ok
+          : typeof commandReceipt.exit_code === "number"
+            ? commandReceipt.exit_code === 0
+            : undefined;
+      return [
+        {
+          command: commandReceipt.command,
+          status: ok === undefined ? undefined : ok ? "passed" : "failed",
+          result:
+            typeof commandReceipt.exit_code === "number"
+              ? `exit code ${commandReceipt.exit_code}`
+              : undefined,
+        },
+      ];
     });
     const ok = typeof receipt.ok === "boolean" ? receipt.ok : undefined;
 
@@ -305,23 +322,29 @@ export function parseRunLogEvidence(content: string | undefined): ReviewReadines
 
   const testsRun = parseRunLogListSection(extractRunLogSection(content, "Tests Run"));
   const commandsRun = parseRunLogListSection(extractRunLogSection(content, "Commands Run"));
-  const verification = parseVerificationReceipt(extractRunLogSection(content, "Verification Receipt"));
+  const verification = parseVerificationReceipt(
+    extractRunLogSection(content, "Verification Receipt"),
+  );
   const textCommandResults = [...commandsRun, ...testsRun]
     .map(parseCommandReceipt)
     .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
 
-  return [{
-    filesChanged: parseRunLogListSection(extractRunLogSection(content, "Files Changed")),
-    testsRun,
-    commandsRun,
-    ...verification,
-    commandResults: [...textCommandResults, ...(verification.commandResults ?? [])],
-    decisionsMade: parseRunLogListSection(extractRunLogSection(content, "Decisions Made")),
-    result: parseValueSection(extractRunLogSection(content, "Result")),
-    risks: parseValueSection(extractRunLogSection(content, "Risks")),
-    followUps: parseRunLogListSection(extractRunLogSection(content, "Follow-Up Tasks")),
-    acceptanceCriteriaEvidence: parseAcceptanceEvidence(extractRunLogSection(content, "Acceptance Criteria Evidence")),
-    notes: parseValueSection(extractRunLogSection(content, "Notes")),
-    tokenEstimate: parseValueSection(extractRunLogSection(content, "Token Estimate")),
-  }];
+  return [
+    {
+      filesChanged: parseRunLogListSection(extractRunLogSection(content, "Files Changed")),
+      testsRun,
+      commandsRun,
+      ...verification,
+      commandResults: [...textCommandResults, ...(verification.commandResults ?? [])],
+      decisionsMade: parseRunLogListSection(extractRunLogSection(content, "Decisions Made")),
+      result: parseValueSection(extractRunLogSection(content, "Result")),
+      risks: parseValueSection(extractRunLogSection(content, "Risks")),
+      followUps: parseRunLogListSection(extractRunLogSection(content, "Follow-Up Tasks")),
+      acceptanceCriteriaEvidence: parseAcceptanceEvidence(
+        extractRunLogSection(content, "Acceptance Criteria Evidence"),
+      ),
+      notes: parseValueSection(extractRunLogSection(content, "Notes")),
+      tokenEstimate: parseValueSection(extractRunLogSection(content, "Token Estimate")),
+    },
+  ];
 }

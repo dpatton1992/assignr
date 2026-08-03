@@ -1,16 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stringify } from "yaml";
 
 import { coordinatorCommand } from "../src/commands/coordinator.js";
 import { createDispatchPlan } from "../src/commands/dispatchPlan.js";
-import { buildCoordinatorQueue, buildDispatchPlan } from "../src/coordination/reviewQueue.js";
 import { initCommand } from "../src/commands/init.js";
+import { buildCoordinatorQueue, buildDispatchPlan } from "../src/coordination/reviewQueue.js";
 import { loadTasks } from "../src/specs/loadTasks.js";
-import { getPaths } from "../src/utils/paths.js";
 import type { TaskSpec } from "../src/specs/schema.js";
+import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
@@ -100,9 +100,11 @@ describe("coordinator queue", () => {
           id: "feature",
           reason: expect.stringContaining("waiting on dependencies: setup"),
         }),
-      ])
+      ]),
     );
-    expect(queue.waiting.find((item) => item.id === "feature")?.reason).toContain("blocked by: setup");
+    expect(queue.waiting.find((item) => item.id === "feature")?.reason).toContain(
+      "blocked by: setup",
+    );
   });
 
   it("keeps explicit conflicts out of the parallel-safe runnable batch", () => {
@@ -226,7 +228,7 @@ describe("coordinator queue", () => {
           section: "needs_review",
           reason: "ready for owner review",
         },
-      ])
+      ]),
     );
     expect(plan.stop_after_batch.required).toBe(true);
     expect(plan.verification_plan).toEqual({
@@ -254,21 +256,25 @@ describe("coordinator queue", () => {
     });
 
     expect(plan.execution_mode).toBe("worktree");
-    expect(plan.assignments).toContainEqual(expect.objectContaining({
-      task_id: "independent",
-      execution: {
-        mode: "worktree",
-        control_repo: cwd,
-        workspace_path: join(p.worktrees, "independent"),
-        branch: "manciple/independent",
-        prepared: false,
-      },
-    }));
-    expect(plan.do_not_dispatch).toContainEqual(expect.objectContaining({
-      task_id: "downstream",
-      section: "waiting",
-      reason: expect.stringContaining("waiting on dependencies: reviewed-dep"),
-    }));
+    expect(plan.assignments).toContainEqual(
+      expect.objectContaining({
+        task_id: "independent",
+        execution: {
+          mode: "worktree",
+          control_repo: cwd,
+          workspace_path: join(p.worktrees, "independent"),
+          branch: "manciple/independent",
+          prepared: false,
+        },
+      }),
+    );
+    expect(plan.do_not_dispatch).toContainEqual(
+      expect.objectContaining({
+        task_id: "downstream",
+        section: "waiting",
+        reason: expect.stringContaining("waiting on dependencies: reviewed-dep"),
+      }),
+    );
   });
 
   it("keeps non-independent tasks as exclusive runnable slices", () => {
@@ -320,9 +326,12 @@ describe("coordinator queue", () => {
     expect(queue.needsReview.map((item) => item.id)).toEqual(["needs-human-review"]);
     expect(queue.completeReady.map((item) => item.id)).toEqual(["done-but-active"]);
     expect(queue.blocked.map((item) => item.id)).toEqual(["blocked-task"]);
-    expect(queue.reworkNeeded.map((item) => item.id)).toEqual(["partial-task", "review-needs-rework"]);
+    expect(queue.reworkNeeded.map((item) => item.id)).toEqual([
+      "partial-task",
+      "review-needs-rework",
+    ]);
     expect(queue.reworkNeeded.find((item) => item.id === "review-needs-rework")?.reason).toContain(
-      "path overlap with active-work"
+      "path overlap with active-work",
     );
   });
 

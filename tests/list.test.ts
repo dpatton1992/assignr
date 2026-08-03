@@ -1,10 +1,10 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { listCommand } from "../src/commands/list.js";
-import { getPaths } from "../src/utils/paths.js";
 import type { TaskTier } from "../src/specs/loadTasks.js";
+import { getPaths } from "../src/utils/paths.js";
 
 const tempDirs: string[] = [];
 
@@ -50,7 +50,7 @@ function writeTask(
       "notes: []",
       "",
     ].join("\n"),
-    "utf-8"
+    "utf-8",
   );
 }
 

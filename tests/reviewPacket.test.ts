@@ -1,14 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { spawnSync } from "child_process";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { stringify } from "yaml";
-
-import { initCommand } from "../src/commands/init.js";
 import { completeCommand } from "../src/commands/complete.js";
+import { initCommand } from "../src/commands/init.js";
 import { runLogCommand } from "../src/commands/runLog.js";
-import { getPaths } from "../src/utils/paths.js";
 import {
   getReviewQueue,
   getScopeDrift,
@@ -16,6 +14,7 @@ import {
   ReviewPacketError,
 } from "../src/review/reviewPacket.js";
 import type { TaskSpec } from "../src/specs/schema.js";
+import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
@@ -39,6 +38,14 @@ function writeTask(id: string, overrides: Partial<TaskSpec> = {}): void {
     domain: "core",
     priority: "medium",
     depends_on: [],
+    blocks: [],
+    conflicts_with: [],
+    can_run_independently: true,
+    path_ownership: {
+      touched_paths: [],
+      locked_paths: [],
+      unsafe_parallel_areas: [],
+    },
     allowed_paths: ["src/review/readiness.ts", "tests/reviewReadiness.test.ts"],
     forbidden_paths: ["dist/"],
     goal: "Assemble a review packet for presentation clients.",
@@ -107,7 +114,7 @@ function gitInitAndCommitBaseline(): void {
   const commit = spawnSync(
     "git",
     ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "baseline"],
-    { cwd, encoding: "utf8" }
+    { cwd, encoding: "utf8" },
   );
   expect(commit.status).toBe(0);
 }
@@ -143,7 +150,11 @@ describe("getTaskReviewPacket", () => {
     expect(packet.scopeDrift.hasDrift).toBe(false);
 
     expect(packet.acceptanceCriteria).toEqual([
-      { criterion: "Review packet is fully assembled.", evidence: "Complete packet tests cover the assembled shape.", covered: true },
+      {
+        criterion: "Review packet is fully assembled.",
+        evidence: "Complete packet tests cover the assembled shape.",
+        covered: true,
+      },
     ]);
 
     expect(packet.verification.requiredCommands).toEqual(["pnpm build", "pnpm test"]);
@@ -246,7 +257,9 @@ describe("getTaskReviewPacket", () => {
 
     expect(packet.scopeDrift.source).toBe("git-status");
     expect(packet.scopeDrift.outOfScopePaths).toEqual([]);
-    expect(packet.scopeDrift.forbiddenPaths).toEqual([{ path: "dist/bundle.js", pattern: "dist/" }]);
+    expect(packet.scopeDrift.forbiddenPaths).toEqual([
+      { path: "dist/bundle.js", pattern: "dist/" },
+    ]);
     expect(packet.scopeDrift.hasDrift).toBe(true);
   });
 
@@ -266,7 +279,9 @@ describe("getTaskReviewPacket", () => {
 
     expect(packet.changedFilesSource).toBe("run-log");
     expect(packet.scopeDrift.outOfScopePaths).toEqual(["README.md"]);
-    expect(packet.scopeDrift.forbiddenPaths).toEqual([{ path: "dist/bundle.js", pattern: "dist/" }]);
+    expect(packet.scopeDrift.forbiddenPaths).toEqual([
+      { path: "dist/bundle.js", pattern: "dist/" },
+    ]);
     expect(packet.scopeDrift.hasDrift).toBe(true);
 
     const readme = packet.changedPaths.find((entry) => entry.path === "README.md");
@@ -308,7 +323,7 @@ describe("getTaskReviewPacket", () => {
 
     const failedPacket = getTaskReviewPacket("check-failed", { specsTasksDir: p.specsTasks, cwd });
     const failedOutcomes = Object.fromEntries(
-      failedPacket.verification.commandOutcomes.map((outcome) => [outcome.command, outcome.status])
+      failedPacket.verification.commandOutcomes.map((outcome) => [outcome.command, outcome.status]),
     );
     expect(failedOutcomes["pnpm build"]).toBe("passed");
     expect(failedOutcomes["pnpm test"]).toBe("failed");
@@ -330,9 +345,15 @@ describe("getTaskReviewPacket", () => {
       followUps: ["none"],
     });
 
-    const missingPacket = getTaskReviewPacket("check-missing", { specsTasksDir: p.specsTasks, cwd });
+    const missingPacket = getTaskReviewPacket("check-missing", {
+      specsTasksDir: p.specsTasks,
+      cwd,
+    });
     const missingOutcomes = Object.fromEntries(
-      missingPacket.verification.commandOutcomes.map((outcome) => [outcome.command, outcome.status])
+      missingPacket.verification.commandOutcomes.map((outcome) => [
+        outcome.command,
+        outcome.status,
+      ]),
     );
     expect(missingOutcomes["pnpm build"]).toBe("skipped");
     expect(missingOutcomes["pnpm lint"]).toBe("missing");
@@ -358,16 +379,16 @@ describe("getTaskReviewPacket", () => {
 
     expect(second).toEqual(first);
     expect(first.changedPaths.map((entry) => entry.path)).toEqual(
-      [...first.changedPaths.map((entry) => entry.path)].sort()
+      [...first.changedPaths.map((entry) => entry.path)].sort(),
     );
   });
 
   it("throws for an unknown task id", () => {
     expect(() => getTaskReviewPacket("missing-task", { specsTasksDir: p.specsTasks, cwd })).toThrow(
-      ReviewPacketError
+      ReviewPacketError,
     );
     expect(() => getTaskReviewPacket("missing-task", { specsTasksDir: p.specsTasks, cwd })).toThrow(
-      "Task not found: missing-task"
+      "Task not found: missing-task",
     );
   });
 });
@@ -382,7 +403,10 @@ describe("getReviewQueue", () => {
     const summary = getReviewQueue({ specsTasksDir: p.specsTasks, cwd });
 
     expect(summary.needsReview.count).toBe(2);
-    expect(summary.needsReview.rows.map((row) => row.taskId)).toEqual(["alpha-review", "beta-review"]);
+    expect(summary.needsReview.rows.map((row) => row.taskId)).toEqual([
+      "alpha-review",
+      "beta-review",
+    ]);
     expect(summary.needsReview.rows[0]).toMatchObject({
       title: "alpha-review",
       status: "needs_review",
@@ -416,7 +440,10 @@ describe("getReviewQueue", () => {
     const second = getReviewQueue({ specsTasksDir: p.specsTasks, cwd });
 
     expect(second).toEqual(first);
-    expect(first.needsReview.rows.map((row) => row.taskId)).toEqual(["alpha-review", "zeta-review"]);
+    expect(first.needsReview.rows.map((row) => row.taskId)).toEqual([
+      "alpha-review",
+      "zeta-review",
+    ]);
   });
 });
 

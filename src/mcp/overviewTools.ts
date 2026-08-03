@@ -1,17 +1,17 @@
-import { relative } from "path";
-import { z } from "zod";
+import { relative } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { createDispatchPlan } from "../commands/dispatchPlan.js";
-import { VERIFY_PROFILE_NAMES, parseVerifyProfile, runVerifyProfile } from "../commands/verify.js";
+import { parseVerifyProfile, runVerifyProfile, VERIFY_PROFILE_NAMES } from "../commands/verify.js";
 import { checkLifecyclePlacement } from "../lifecycle/placement.js";
 import { listTasksForMcp } from "../mcpList.js";
-import { loadTasks } from "../specs/loadTasks.js";
 import type { LoadedTaskWithTier } from "../specs/loadTasks.js";
+import { loadTasks } from "../specs/loadTasks.js";
 import { validateTasks } from "../specs/validateTasks.js";
-import { getRepoContext, repoInputSchema } from "./context.js";
-import type { McpRepoContext } from "./context.js";
-import { jsonResult, toolResult } from "./results.js";
 import { findManagedWorktreeByWorkspace } from "../worktrees/manager.js";
+import type { McpRepoContext } from "./context.js";
+import { getRepoContext, repoInputSchema } from "./context.js";
+import { jsonResult, toolResult } from "./results.js";
 
 function dependencyContextTask(task: LoadedTaskWithTier): LoadedTaskWithTier {
   return {
@@ -64,7 +64,7 @@ export function registerOverviewTools(server: McpServer): void {
       toolResult(() => {
         const ctx = getRepoContext(repo);
         return jsonResult(listTasksForMcp(ctx.paths.specsTasks, ctx.cwd, { status, tier, domain }));
-      })
+      }),
   );
 
   server.registerTool(
@@ -77,11 +77,7 @@ export function registerOverviewTools(server: McpServer): void {
     ({ repo }) =>
       toolResult(() => {
         const ctx = getRepoContext(repo);
-        const {
-          tasks,
-          errors: loadErrors,
-          activeFilePaths,
-        } = loadActiveValidationTasks(ctx);
+        const { tasks, errors: loadErrors, activeFilePaths } = loadActiveValidationTasks(ctx);
         const result = validateTasks(tasks, {
           specsDomainsDir: ctx.paths.specsDomains,
           countFilePaths: activeFilePaths,
@@ -97,7 +93,7 @@ export function registerOverviewTools(server: McpServer): void {
             issues.map((issue) => ({
               file: relative(ctx.cwd, filePath),
               message: `[${issue.field}] ${issue.message}`,
-            }))
+            })),
           ),
         ];
 
@@ -111,14 +107,15 @@ export function registerOverviewTools(server: McpServer): void {
           },
           errors,
         });
-      })
+      }),
   );
 
   server.registerTool(
     "manciple_check_lifecycle",
     {
       title: "Check Manciple Lifecycle Placement",
-      description: "Validate that task files live in the lifecycle directory matching their status.",
+      description:
+        "Validate that task files live in the lifecycle directory matching their status.",
       inputSchema: repoInputSchema,
     },
     ({ repo }) =>
@@ -130,9 +127,9 @@ export function registerOverviewTools(server: McpServer): void {
             activeDir: ctx.paths.tasksActive,
             completedDir: ctx.paths.tasksCompleted,
             archivedDir: ctx.paths.tasksArchived,
-          })
+          }),
         );
-      })
+      }),
   );
 
   server.registerTool(
@@ -143,25 +140,34 @@ export function registerOverviewTools(server: McpServer): void {
         "Return a deterministic coordinator packet with assignments, deferrals, stop conditions, and verification commands.",
       inputSchema: {
         ...repoInputSchema,
-        use_worktrees: z.boolean().optional().describe("Override worktrees.enabled for this dispatch only."),
+        use_worktrees: z
+          .boolean()
+          .optional()
+          .describe("Override worktrees.enabled for this dispatch only."),
       },
     },
     ({ repo, use_worktrees }) =>
       toolResult(() => {
         const ctx = getRepoContext(repo);
-        return jsonResult(createDispatchPlan(ctx.paths.specsTasks, ctx.cwd, { useWorktrees: use_worktrees }));
-      })
+        return jsonResult(
+          createDispatchPlan(ctx.paths.specsTasks, ctx.cwd, { useWorktrees: use_worktrees }),
+        );
+      }),
   );
 
   server.registerTool(
     "manciple_verify",
     {
       title: "Run Manciple Verify Profile",
-      description: "Run a deterministic verification profile and return a compact pass/fail receipt.",
+      description:
+        "Run a deterministic verification profile and return a compact pass/fail receipt.",
       inputSchema: {
         ...repoInputSchema,
         profile: z.enum(VERIFY_PROFILE_NAMES),
-        workspace: z.string().optional().describe("Registered managed worktree in which verification should run."),
+        workspace: z
+          .string()
+          .optional()
+          .describe("Registered managed worktree in which verification should run."),
       },
     },
     ({ repo, profile, workspace }) =>
@@ -174,10 +180,13 @@ export function registerOverviewTools(server: McpServer): void {
             worktreesDir: ctx.paths.worktrees,
             specsTasksDir: ctx.paths.specsTasks,
           });
-          if (!record) throw new Error(`Workspace is not a registered Manciple worktree: ${workspace}`);
+          if (!record)
+            throw new Error(`Workspace is not a registered Manciple worktree: ${workspace}`);
           verificationCwd = record.workspacePath;
         }
-        return jsonResult(await runVerifyProfile(parseVerifyProfile(profile), { cwd: verificationCwd }));
-      })
+        return jsonResult(
+          await runVerifyProfile(parseVerifyProfile(profile), { cwd: verificationCwd }),
+        );
+      }),
   );
 }

@@ -1,22 +1,20 @@
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
-import { dirname, join, relative } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import picocolors from "picocolors";
 import { parse } from "yaml";
-import { loadTasks } from "../specs/loadTasks.js";
-import { pathOwnershipWarningsForTask } from "../specs/loadTasks.js";
+import type { Status } from "../constants.js";
 import type { LoadTaskTier, PathOwnershipWarning } from "../specs/loadTasks.js";
+import { loadTasks, pathOwnershipWarningsForTask } from "../specs/loadTasks.js";
+import type { TaskSpec } from "../specs/schema.js";
 import {
-  renderTemplate,
-  renderDomainContext,
-  implementationPromptFilename,
   IMPLEMENTATION_TEMPLATE,
+  implementationPromptFilename,
   REVIEW_TEMPLATE,
+  renderDomainContext,
+  renderTemplate,
   TEST_TEMPLATE,
 } from "../templates/renderTemplate.js";
-import type { Status } from "../constants.js";
-import type { TaskSpec } from "../specs/schema.js";
 import { getPaths } from "../utils/paths.js";
-import { colorForStatus, statusSymbol } from "../utils/styling.js";
-import picocolors from "picocolors";
 
 export function getTemplate(type: TaskSpec["type"]): string {
   switch (type) {
@@ -29,13 +27,17 @@ export function getTemplate(type: TaskSpec["type"]): string {
   }
 }
 
-export function loadDomainContext(specsTasksDir: string, domain: string, cwd: string): string | undefined {
+export function loadDomainContext(
+  specsTasksDir: string,
+  domain: string,
+  cwd: string,
+): string | undefined {
   const mancipleRoot = relative(cwd, dirname(dirname(specsTasksDir)));
   const domainPath = join(getPaths(cwd, mancipleRoot).specsDomains, `${domain}.yaml`);
 
   if (!existsSync(domainPath)) {
     console.error(
-      `Warning: optional domain context not found for "${domain}" at ${domainPath.replace(cwd + "/", "")}; compiling without domain context.`
+      `Warning: optional domain context not found for "${domain}" at ${domainPath.replace(`${cwd}/`, "")}; compiling without domain context.`,
     );
     return undefined;
   }
@@ -66,7 +68,7 @@ function printOwnershipWarnings(warnings: PathOwnershipWarning[]): void {
   console.error("  ⚠ Path ownership warnings:");
   for (const warning of warnings) {
     console.error(
-      `    - ${warning.affected_path} is ${formatOwnershipKind(warning.kind)} by ${warning.owner_task_id} (${warning.owner_path}). Keep this compile to a small safe slice.`
+      `    - ${warning.affected_path} is ${formatOwnershipKind(warning.kind)} by ${warning.owner_task_id} (${warning.owner_path}). Keep this compile to a small safe slice.`,
     );
   }
 }
@@ -88,7 +90,7 @@ export function compileCommand(options: CompileOptions): void {
   if (errors.length > 0) {
     console.error(`Cannot compile: ${errors.length} task(s) failed to load.`);
     for (const e of errors) {
-      console.error(`  ${picocolors.red("✕")} ${e.filePath.replace(cwd + "/", "")}: ${e.error}`);
+      console.error(`  ${picocolors.red("✕")} ${e.filePath.replace(`${cwd}/`, "")}: ${e.error}`);
     }
     process.exit(1);
   }
@@ -105,9 +107,7 @@ export function compileCommand(options: CompileOptions): void {
     targets = tasks.filter((t) => t.spec.status === status);
   } else if (!all) {
     // Default: compile pending and in_progress
-    targets = tasks.filter(
-      (t) => t.spec.status === "pending" || t.spec.status === "in_progress"
-    );
+    targets = tasks.filter((t) => t.spec.status === "pending" || t.spec.status === "in_progress");
   }
 
   if (targets.length === 0) {
@@ -129,8 +129,12 @@ export function compileCommand(options: CompileOptions): void {
     const rendered = renderTemplate(template, spec, domainContext);
     const outPath = join(generatedDir, implementationPromptFilename(spec.id));
     writeFileSync(outPath, rendered, "utf-8");
-    console.log(`  ${picocolors.green("✓ Compiled:")} ${picocolors.bold(outPath.replace(cwd + "/", ""))}`);
+    console.log(
+      `  ${picocolors.green("✓ Compiled:")} ${picocolors.bold(outPath.replace(`${cwd}/`, ""))}`,
+    );
   }
 
-  console.log(`\n${picocolors.green(picocolors.bold(`Compiled ${targets.length} task${targets.length === 1 ? "" : "s"}.`))}`);
+  console.log(
+    `\n${picocolors.green(picocolors.bold(`Compiled ${targets.length} task${targets.length === 1 ? "" : "s"}.`))}`,
+  );
 }

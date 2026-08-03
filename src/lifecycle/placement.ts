@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "fs";
-import { join, relative } from "path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { parse } from "yaml";
 
 export type LifecycleTier = "active" | "completed" | "archived";
@@ -63,7 +63,9 @@ function displayPath(cwd: string, path: string): string {
   return rel && !rel.startsWith("..") ? rel : path;
 }
 
-export function checkLifecyclePlacement(options: LifecyclePlacementOptions): LifecyclePlacementResult {
+export function checkLifecyclePlacement(
+  options: LifecyclePlacementOptions,
+): LifecyclePlacementResult {
   const tiers: Array<{ tier: LifecycleTier; dir: string }> = [
     { tier: "active", dir: options.activeDir },
     { tier: "completed", dir: options.completedDir },
@@ -88,7 +90,8 @@ export function checkLifecyclePlacement(options: LifecyclePlacementOptions): Lif
         }
 
         const expected = expectedDirectory(status, options);
-        const expectedDisplay = expected === "<unknown>" ? expected : displayPath(options.cwd, expected);
+        const expectedDisplay =
+          expected === "<unknown>" ? expected : displayPath(options.cwd, expected);
         issues.push({
           file: displayPath(options.cwd, file),
           tier,

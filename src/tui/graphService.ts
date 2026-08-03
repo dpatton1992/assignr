@@ -1,6 +1,6 @@
-import type { ManciplePaths } from "../utils/paths.js";
-import { getTaskGraphPacket } from "../graph/taskGraphPacket.js";
 import type { TaskGraphOptions, TaskGraphPacket } from "../graph/taskGraphPacket.js";
+import { getTaskGraphPacket } from "../graph/taskGraphPacket.js";
+import type { ManciplePaths } from "../utils/paths.js";
 
 /**
  * GraphService is the TUI's data boundary for task graph presentation.

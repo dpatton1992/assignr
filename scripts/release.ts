@@ -20,11 +20,11 @@
  *   --dry-run       Print the revised release plan without executing
  *   --preview       Show generated release notes only
  */
-import { spawnSync } from "child_process";
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "fs";
-import { resolve, join } from "path";
-import { tmpdir } from "os";
-import { fileURLToPath } from "url";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { checkReleaseTagVersion } from "./checkReleaseTagVersion.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -60,7 +60,9 @@ function run(command: string, args: string[], opts: RunOpts): void {
     if (result.error) {
       throw new Error(`Failed to start ${command}: ${result.error.message}`);
     }
-    throw new Error(`Command failed (${[command, ...args].join(" ")}) with exit code ${result.status}`);
+    throw new Error(
+      `Command failed (${[command, ...args].join(" ")}) with exit code ${result.status}`,
+    );
   }
 }
 
@@ -72,7 +74,11 @@ function runCapture(command: string, args: string[], cwd: string): string {
   });
   if (result.error || result.status !== 0) {
     const printableCommand = [command, ...args].join(" ");
-    throw new Error(result.stderr?.toString().trim() || result.error?.message || `Command failed: ${printableCommand}`);
+    throw new Error(
+      result.stderr?.toString().trim() ||
+        result.error?.message ||
+        `Command failed: ${printableCommand}`,
+    );
   }
   return result.stdout.trim();
 }
@@ -108,14 +114,17 @@ function getLastTag(cwd: string): string | null {
 
 export function bumpVersion(version: string, bump: BumpType): string {
   const parts = version.split(".").map(Number);
-  if (parts.length !== 3 || parts.some(isNaN)) {
+  if (parts.length !== 3 || parts.some(Number.isNaN)) {
     throw new Error(`Invalid semver version: "${version}"`);
   }
   const [major, minor, patch] = parts;
   switch (bump) {
-    case "major": return `${major + 1}.0.0`;
-    case "minor": return `${major}.${minor + 1}.0`;
-    case "patch": return `${major}.${minor}.${patch + 1}`;
+    case "major":
+      return `${major + 1}.0.0`;
+    case "minor":
+      return `${major}.${minor + 1}.0`;
+    case "patch":
+      return `${major}.${minor}.${patch + 1}`;
   }
 }
 
@@ -125,18 +134,26 @@ export function generateReleaseNotes(newVersion: string, cwd: string): string {
     ? git(["log", "--oneline", "--no-decorate", `${lastTag}..HEAD`], cwd)
     : git(["log", "--oneline", "--no-decorate"], cwd);
   const date = new Date().toISOString().slice(0, 10);
-  const lines = log.split("\n").filter(Boolean).map((l) => `- ${l}`).join("\n");
+  const lines = log
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => `- ${l}`)
+    .join("\n");
   return `## v${newVersion} (${date})\n\n${lines}\n`;
 }
 
 export function parseReleaseArgs(argv: string[]): ReleaseOptions {
-  const bump = argv.find((arg): arg is BumpType => (VALID_BUMPS as readonly string[]).includes(arg));
+  const bump = argv.find((arg): arg is BumpType =>
+    (VALID_BUMPS as readonly string[]).includes(arg),
+  );
   const otpIdx = argv.indexOf("--otp");
   const otp = otpIdx >= 0 ? argv[otpIdx + 1] : undefined;
   const dryRun = argv.includes("--dry-run");
   const preview = argv.includes("--preview");
   if (!bump) {
-    throw new Error(`Usage: pnpm release <${VALID_BUMPS.join("|")}> [--otp <code>] [--dry-run] [--preview]`);
+    throw new Error(
+      `Usage: pnpm release <${VALID_BUMPS.join("|")}> [--otp <code>] [--dry-run] [--preview]`,
+    );
   }
   return { bump, otp, dryRun, preview };
 }
@@ -144,8 +161,13 @@ export function parseReleaseArgs(argv: string[]): ReleaseOptions {
 export function assertCleanWorktree(cwd: string): void {
   const dirty = git(["status", "--porcelain"], cwd);
   if (dirty.length > 0) {
-    const lines = dirty.split("\n").map((line) => `    ${line}`).join("\n");
-    throw new Error(`Refusing to release: the working tree is dirty.\n${lines}\nCommit or stash all changes before releasing.`);
+    const lines = dirty
+      .split("\n")
+      .map((line) => `    ${line}`)
+      .join("\n");
+    throw new Error(
+      `Refusing to release: the working tree is dirty.\n${lines}\nCommit or stash all changes before releasing.`,
+    );
   }
 }
 
@@ -160,7 +182,9 @@ export function assertReleaseTagAbsent(tag: string, cwd: string): void {
 export function verifyReleaseTagInvariant(tag: string, cwd: string): void {
   const outcome = checkReleaseTagVersion(tag, { cwd });
   if (!outcome.ok) {
-    throw new Error(`Refusing to release: release tag invariant violated.\n  ${outcome.failure.message}`);
+    throw new Error(
+      `Refusing to release: release tag invariant violated.\n  ${outcome.failure.message}`,
+    );
   }
 }
 
@@ -181,11 +205,19 @@ export function releaseStepDescriptions(newVersion: string, options: ReleaseOpti
 
 export function commitVersionBump(newVersion: string, cwd: string): void {
   gitCheck(["add", "package.json"], cwd, `Failed to stage package.json for v${newVersion}`);
-  gitCheck(["commit", "-m", `chore: bump version to ${newVersion}`], cwd, `Failed to create the version commit for v${newVersion}`);
+  gitCheck(
+    ["commit", "-m", `chore: bump version to ${newVersion}`],
+    cwd,
+    `Failed to create the version commit for v${newVersion}`,
+  );
 }
 
 export function createReleaseTag(tag: string, cwd: string): void {
-  gitCheck(["tag", "-a", tag, "-m", `Release ${tag}`], cwd, `Failed to create annotated tag ${tag}`);
+  gitCheck(
+    ["tag", "-a", tag, "-m", `Release ${tag}`],
+    cwd,
+    `Failed to create annotated tag ${tag}`,
+  );
 }
 
 export function runRelease(options: ReleaseOptions, runOptions: ReleaseRunOptions = {}): void {
@@ -224,7 +256,7 @@ export function runRelease(options: ReleaseOptions, runOptions: ReleaseRunOption
   // 1. Write the next package version.
   console.log(`\nUpdating package.json: v${currentVersion} -> v${newVersion}`);
   pkg.version = newVersion;
-  writeFileSync(pkgPath, JSON.stringify(pkg, null, "\t") + "\n");
+  writeFileSync(pkgPath, `${JSON.stringify(pkg, null, "  ")}\n`);
 
   // 2. Run the release checks against the bumped version.
   if (runOptions.runChecks !== false) {
@@ -280,7 +312,9 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   runRelease(options);
 }
 
-const invokedDirectly = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
+const invokedDirectly = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
 if (invokedDirectly) {
   try {
     main();

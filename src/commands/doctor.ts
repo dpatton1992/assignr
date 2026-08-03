@@ -1,9 +1,9 @@
-import { createRequire } from "module";
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
-import { resolve } from "path";
-import { getPaths } from "../utils/paths.js";
-import { colorForStatus, headerBanner } from "../utils/styling.js";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
 import picocolors from "picocolors";
+import { getPaths } from "../utils/paths.js";
+import { headerBanner } from "../utils/styling.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../../package.json") as { version: string };
@@ -81,7 +81,11 @@ export function doctorCommand(cwd: string, root: string): void {
   if (allOk) {
     console.log(picocolors.green("All checks passed. Manciple is configured correctly."));
   } else {
-    console.log(picocolors.red(`Some checks failed. Run "manciple init" to fix missing structure under ${relativeToCwd(projectRoot, p.root)}/.`));
+    console.log(
+      picocolors.red(
+        `Some checks failed. Run "manciple init" to fix missing structure under ${relativeToCwd(projectRoot, p.root)}/.`,
+      ),
+    );
     process.exit(1);
   }
 }

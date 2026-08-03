@@ -91,7 +91,8 @@ export function configureLegacyCommandCompatibility(program: Command, argv: stri
         help += `  manciple ${old.padEnd(20)} → manciple ${replacement}\n`;
       }
     } else {
-      help += "\nRun `manciple --help --all` to show all commands, including legacy/deprecated ones.\n";
+      help +=
+        "\nRun `manciple --help --all` to show all commands, including legacy/deprecated ones.\n";
     }
 
     const sections = [

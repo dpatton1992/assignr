@@ -1,8 +1,8 @@
-import { relative } from "path";
-import { loadTasks } from "../specs/loadTasks.js";
-import { buildDispatchPlan } from "../coordination/reviewQueue.js";
-import type { DispatchPlan } from "../coordination/reviewQueue.js";
+import { relative } from "node:path";
 import { loadConfig } from "../config.js";
+import type { DispatchPlan } from "../coordination/reviewQueue.js";
+import { buildDispatchPlan } from "../coordination/reviewQueue.js";
+import { loadTasks } from "../specs/loadTasks.js";
 import { getPaths } from "../utils/paths.js";
 import { isGitRepository, listManagedWorktrees } from "../worktrees/manager.js";
 
@@ -26,7 +26,9 @@ export function createDispatchPlan(
     ? listManagedWorktrees({ controlRepo: cwd, worktreesDir: paths.worktrees, specsTasksDir })
     : [];
   if (!useWorktrees) {
-    const activeIds = new Set(tasks.filter((task) => task.tier === "active").map((task) => task.spec.id));
+    const activeIds = new Set(
+      tasks.filter((task) => task.tier === "active").map((task) => task.spec.id),
+    );
     const conflicts = records.filter((record) => activeIds.has(record.taskId));
     if (conflicts.length > 0) {
       throw new Error(
@@ -40,12 +42,17 @@ export function createDispatchPlan(
     dependenciesRequireComplete: useWorktrees,
     controlRepo: cwd,
     worktreesDir: paths.worktrees,
-    preparedWorktrees: new Map((useWorktrees ? records : []).map((record) => [record.taskId, {
-      workspacePath: record.workspacePath,
-      branch: record.branch,
-      baseSha: record.baseSha,
-      claimState: record.claimState,
-    }])),
+    preparedWorktrees: new Map(
+      (useWorktrees ? records : []).map((record) => [
+        record.taskId,
+        {
+          workspacePath: record.workspacePath,
+          branch: record.branch,
+          baseSha: record.baseSha,
+          claimState: record.claimState,
+        },
+      ]),
+    ),
   });
 }
 

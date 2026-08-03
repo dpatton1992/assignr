@@ -1,28 +1,30 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
-} from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { spawnSync } from "child_process";
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initCommand } from "../src/commands/init.js";
 import { newCommand } from "../src/commands/new.js";
 import { runLogCommand } from "../src/commands/runLog.js";
-import { getPaths } from "../src/utils/paths.js";
 import { findLatestRunLogPath, readLatestRunLogContent } from "../src/review/evidence.js";
+import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
 
 function latestRunLog(): string {
-  const files = readdirSync(p.runs).filter((file) => file.endsWith(".md")).sort();
+  const files = readdirSync(p.runs)
+    .filter((file) => file.endsWith(".md"))
+    .sort();
   return readFileSync(join(p.runs, files.at(-1) ?? ""), "utf-8");
 }
 
@@ -78,7 +80,9 @@ describe("runLogCommand", () => {
         decisionsMade: ["Kept the run-log format markdown-compatible."],
         risks: "No known runtime risks.",
         followUps: ["none"],
-        acceptanceCriteriaEvidence: ["Run logs expose receipt fields.: Added first-class receipt sections."],
+        acceptanceCriteriaEvidence: [
+          "Run logs expose receipt fields.: Added first-class receipt sections.",
+        ],
         verifyReceipt: '{"ok":true,"profile":"worker"}',
         notes: "Implemented run-log metadata capture.",
       });
@@ -143,7 +147,7 @@ describe("runLogCommand", () => {
       expect(content).toContain("- pnpm build");
       expect(content).toContain("## Tests Run");
       expect(content).toContain(
-        "Unknown: no tests were provided. Pass test commands in tests_run or provide a deterministic verify receipt."
+        "Unknown: no tests were provided. Pass test commands in tests_run or provide a deterministic verify receipt.",
       );
       expect(content).toContain("Unknown: no deterministic verify receipt was provided.");
     } finally {
@@ -162,7 +166,7 @@ describe("runLogCommand", () => {
       const content = latestRunLog();
       expect(content).toContain("## Decisions Made");
       expect(content).toContain(
-        "Completed implementation work that changed behavior must record Decisions Made; omit only when blocked before meaningful changes."
+        "Completed implementation work that changed behavior must record Decisions Made; omit only when blocked before meaningful changes.",
       );
     } finally {
       logSpy.mockRestore();
@@ -174,7 +178,7 @@ describe("runLogCommand", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
 
     const result = spawnSync(
@@ -194,7 +198,7 @@ describe("runLogCommand", () => {
         "--verify-receipt",
         '{"ok":true,"profile":"worker"}',
       ],
-      { cwd, encoding: "utf-8" }
+      { cwd, encoding: "utf-8" },
     );
 
     expect(result.status).toBe(0);
@@ -214,7 +218,9 @@ describe("runLogCommand", () => {
 
       const content = latestRunLog();
       expect(content).toContain("_Source: unknown_");
-      expect(content).toContain("Unknown: git is unavailable or this directory is not a git repository.");
+      expect(content).toContain(
+        "Unknown: git is unavailable or this directory is not a git repository.",
+      );
       expect(content).toContain("Unknown: no commands were provided.");
     } finally {
       logSpy.mockRestore();
@@ -230,7 +236,9 @@ describe("runLogCommand", () => {
         commandsRun: ["pnpm build"],
       });
 
-      let files = readdirSync(p.runs).filter((file) => file.endsWith(".md")).sort();
+      let files = readdirSync(p.runs)
+        .filter((file) => file.endsWith(".md"))
+        .sort();
       expect(files.length).toBe(1);
       let firstContent = readFileSync(join(p.runs, files[0]), "utf-8");
       expect(firstContent).toContain("- Latest: true");
@@ -241,7 +249,9 @@ describe("runLogCommand", () => {
         commandsRun: ["pnpm test"],
       });
 
-      files = readdirSync(p.runs).filter((file) => file.endsWith(".md")).sort();
+      files = readdirSync(p.runs)
+        .filter((file) => file.endsWith(".md"))
+        .sort();
       expect(files.length).toBe(2);
 
       // First file should now be marked superseded
@@ -277,7 +287,11 @@ describe("runLogCommand", () => {
       // Write a run log "manually" without the latest marker (simulating pre-feature file)
       const oldFilename = "2026-01-01T00-00-00-run-log-capture.md";
       const oldPath = join(p.runs, oldFilename);
-      writeFileSync(oldPath, `# Run Log: Run log capture\n\n## Metadata\n\n- Task ID: run-log-capture\n- Status: needs_review\n`, "utf-8");
+      writeFileSync(
+        oldPath,
+        `# Run Log: Run log capture\n\n## Metadata\n\n- Task ID: run-log-capture\n- Status: needs_review\n`,
+        "utf-8",
+      );
 
       // Even without the latest marker, should be found
       const content = readLatestRunLogContent(cwd, "run-log-capture");
@@ -289,7 +303,9 @@ describe("runLogCommand", () => {
         commandsRun: ["pnpm test"],
       });
 
-      const files = readdirSync(p.runs).filter((file) => file.endsWith(".md")).sort();
+      const files = readdirSync(p.runs)
+        .filter((file) => file.endsWith(".md"))
+        .sort();
       expect(files.length).toBe(2);
 
       // Old file should be marked superseded

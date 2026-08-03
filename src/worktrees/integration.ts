@@ -1,15 +1,15 @@
-import { execFileSync, spawnSync } from "child_process";
-import { closeSync, existsSync, mkdirSync, openSync, rmSync, unlinkSync } from "fs";
-import { dirname, isAbsolute, join, resolve } from "path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { closeSync, existsSync, mkdirSync, openSync, rmSync, unlinkSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { TaskSpec } from "../specs/schema.js";
 import { pathMatchesPattern } from "../utils/pathUtils.js";
+import type { ManagedWorktreeRecord, WorktreeServiceOptions } from "./manager.js";
 import {
   getManagedWorktree,
   managedWorktreeChangedFiles,
   primaryCodeChanges,
   setManagedWorktreeState,
 } from "./manager.js";
-import type { ManagedWorktreeRecord, WorktreeServiceOptions } from "./manager.js";
 
 export interface WorktreeIntegrationResult {
   managed: true;
@@ -65,16 +65,21 @@ function withIntegrationLock<T>(controlRepo: string, operation: () => T): T {
 function validateChangedPaths(task: TaskSpec, changedFiles: string[]): void {
   const allowed = task.allowed_paths ?? [];
   const forbidden = task.forbidden_paths ?? [];
-  const outside = allowed.length === 0
-    ? []
-    : changedFiles.filter((file) => !allowed.some((pattern) => pathMatchesPattern(file, pattern)));
+  const outside =
+    allowed.length === 0
+      ? []
+      : changedFiles.filter(
+          (file) => !allowed.some((pattern) => pathMatchesPattern(file, pattern)),
+        );
   const forbiddenMatches = changedFiles.filter((file) =>
     forbidden.some((pattern) => pathMatchesPattern(file, pattern)),
   );
   if (outside.length > 0 || forbiddenMatches.length > 0) {
     const reasons = [
       ...(outside.length > 0 ? [`outside allowed_paths: ${outside.join(", ")}`] : []),
-      ...(forbiddenMatches.length > 0 ? [`matches forbidden_paths: ${forbiddenMatches.join(", ")}`] : []),
+      ...(forbiddenMatches.length > 0
+        ? [`matches forbidden_paths: ${forbiddenMatches.join(", ")}`]
+        : []),
     ];
     throw new Error(`Worktree integration scope check failed (${reasons.join("; ")}).`);
   }
@@ -88,7 +93,10 @@ function commitRemainingChanges(record: ManagedWorktreeRecord, task: TaskSpec): 
   return true;
 }
 
-function runVerification(commands: string[], cwd: string): Array<{ command: string; exitCode: number; ok: boolean }> {
+function runVerification(
+  commands: string[],
+  cwd: string,
+): Array<{ command: string; exitCode: number; ok: boolean }> {
   const receipts = commands.map((command) => {
     const result = spawnSync(command, {
       cwd,
@@ -98,8 +106,12 @@ function runVerification(commands: string[], cwd: string): Array<{ command: stri
     });
     const exitCode = result.status ?? 1;
     if (exitCode !== 0) {
-      const detail = (result.stderr || result.stdout || "verification command failed").trim().slice(0, 2_000);
-      throw new Error(`Integration verification failed: ${command} (exit ${exitCode})${detail ? `\n${detail}` : ""}`);
+      const detail = (result.stderr || result.stdout || "verification command failed")
+        .trim()
+        .slice(0, 2_000);
+      throw new Error(
+        `Integration verification failed: ${command} (exit ${exitCode})${detail ? `\n${detail}` : ""}`,
+      );
     }
     return { command, exitCode, ok: true };
   });
@@ -130,8 +142,12 @@ export function integrateManagedWorktree(
         `Refusing to integrate ${task.id} into ${primaryBranch}; its managed base branch is ${record.baseBranch}.`,
       );
     }
-    if (!["review_ready", "integrating", "integrated_pending_completion"].includes(record.claimState)) {
-      throw new Error(`Managed worktree ${task.id} is ${record.claimState}, not ready for review integration.`);
+    if (
+      !["review_ready", "integrating", "integrated_pending_completion"].includes(record.claimState)
+    ) {
+      throw new Error(
+        `Managed worktree ${task.id} is ${record.claimState}, not ready for review integration.`,
+      );
     }
     const recoveredSha = alreadyIntegrated(record, controlRepo);
     if (record.claimState === "integrated_pending_completion" && recoveredSha) {
@@ -150,7 +166,9 @@ export function integrateManagedWorktree(
 
     const primaryDirty = primaryCodeChanges(options);
     if (primaryDirty.length > 0) {
-      throw new Error(`Refusing to integrate while primary code is dirty: ${primaryDirty.join(", ")}`);
+      throw new Error(
+        `Refusing to integrate while primary code is dirty: ${primaryDirty.join(", ")}`,
+      );
     }
 
     const changedFiles = managedWorktreeChangedFiles(record);
@@ -183,7 +201,9 @@ export function integrateManagedWorktree(
     const currentPrimaryHead = git(["rev-parse", "HEAD"], controlRepo);
     if (currentPrimaryHead !== primaryHeadBefore) {
       setManagedWorktreeState(task.id, "review_ready", options);
-      throw new Error("Primary HEAD changed during integration verification. Review approval can be retried safely.");
+      throw new Error(
+        "Primary HEAD changed during integration verification. Review approval can be retried safely.",
+      );
     }
 
     try {

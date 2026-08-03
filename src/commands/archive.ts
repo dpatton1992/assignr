@@ -1,6 +1,6 @@
-import { colorForStatus } from "../utils/styling.js";
 import picocolors from "picocolors";
 import { archiveTask } from "../lifecycle/taskLifecycleService.js";
+import { colorForStatus } from "../utils/styling.js";
 
 export interface ArchiveCommandOptions {
   specsTasksDir: string;
@@ -16,5 +16,7 @@ export function archiveCommand(taskId: string, options: ArchiveCommandOptions): 
     process.exit(1);
   }
 
-  console.log(`${picocolors.dim("Archived:")} ${taskId} ${picocolors.yellow("→")} ${colorForStatus("archived")(result.updatedPath.replace(cwd + "/", ""))}`);
+  console.log(
+    `${picocolors.dim("Archived:")} ${taskId} ${picocolors.yellow("→")} ${colorForStatus("archived")(result.updatedPath.replace(`${cwd}/`, ""))}`,
+  );
 }

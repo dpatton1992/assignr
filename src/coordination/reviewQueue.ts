@@ -88,12 +88,15 @@ export interface DispatchPlanBuildOptions extends CoordinatorBuildOptions {
   executionMode?: "worktree" | "in_place";
   controlRepo?: string;
   worktreesDir?: string;
-  preparedWorktrees?: Map<string, {
-    workspacePath: string;
-    branch: string;
-    baseSha: string;
-    claimState: string;
-  }>;
+  preparedWorktrees?: Map<
+    string,
+    {
+      workspacePath: string;
+      branch: string;
+      baseSha: string;
+      claimState: string;
+    }
+  >;
 }
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -161,7 +164,8 @@ function isSharedDocPath(pattern: string): boolean {
 
 function sortTasks(tasks: LoadedTaskWithTier[]): LoadedTaskWithTier[] {
   return [...tasks].sort((a, b) => {
-    const statusDiff = Number(b.spec.status === "in_progress") - Number(a.spec.status === "in_progress");
+    const statusDiff =
+      Number(b.spec.status === "in_progress") - Number(a.spec.status === "in_progress");
     if (statusDiff !== 0) return statusDiff;
 
     const priorityDiff =
@@ -172,7 +176,11 @@ function sortTasks(tasks: LoadedTaskWithTier[]): LoadedTaskWithTier[] {
   });
 }
 
-function row(task: LoadedTaskWithTier, section: CoordinatorSection, reason: string): CoordinatorQueueRow {
+function row(
+  task: LoadedTaskWithTier,
+  section: CoordinatorSection,
+  reason: string,
+): CoordinatorQueueRow {
   return {
     id: task.spec.id,
     title: task.spec.title,
@@ -247,7 +255,10 @@ function explicitConflictReason(task: LoadedTaskWithTier, others: LoadedTaskWith
   return "";
 }
 
-function independenceConflictReason(task: LoadedTaskWithTier, others: LoadedTaskWithTier[]): string {
+function independenceConflictReason(
+  task: LoadedTaskWithTier,
+  others: LoadedTaskWithTier[],
+): string {
   if (others.length === 0) return "";
 
   if (!task.spec.can_run_independently) {
@@ -269,7 +280,7 @@ function dependencyWaitReasons(
 ): string[] {
   const reasons: string[] = [];
   const unresolvedDeps = (task.spec.depends_on ?? []).filter(
-    (dep) => !isDependencyUsable(taskById.get(dep), options)
+    (dep) => !isDependencyUsable(taskById.get(dep), options),
   );
 
   if (unresolvedDeps.length > 0) {
@@ -281,7 +292,7 @@ function dependencyWaitReasons(
       other.spec.id !== task.spec.id &&
       other.tier === "active" &&
       !isDependencyUsable(other, options) &&
-      (other.spec.blocks ?? []).includes(task.spec.id)
+      (other.spec.blocks ?? []).includes(task.spec.id),
   );
 
   if (activeBlockers.length > 0) {
@@ -383,8 +394,10 @@ export function buildCoordinatorQueue(
       row(
         task,
         "runnable",
-        task.spec.can_run_independently ? "dependencies usable; parallel-safe" : "dependencies usable; run as a single slice"
-      )
+        task.spec.can_run_independently
+          ? "dependencies usable; parallel-safe"
+          : "dependencies usable; run as a single slice",
+      ),
     );
   }
 
@@ -398,7 +411,7 @@ export function buildDispatchPlan(
   const executionMode = options.executionMode ?? "in_place";
   const queue = buildCoordinatorQueue(tasks, options);
   const activeTaskById = new Map(
-    tasks.filter((task) => task.tier === "active").map((task) => [task.spec.id, task])
+    tasks.filter((task) => task.tier === "active").map((task) => [task.spec.id, task]),
   );
 
   const claimedDeferrals: DispatchPlanDeferral[] = [];
@@ -418,27 +431,32 @@ export function buildDispatchPlan(
       return [];
     }
     const controlRepo = options.controlRepo ?? process.cwd();
-    const execution: DispatchPlanExecution = executionMode === "worktree"
-      ? {
-          mode: "worktree",
-          control_repo: controlRepo,
-          workspace_path: prepared?.workspacePath ?? `${options.worktreesDir ?? ".manciple/worktrees"}/${item.id}`,
-          branch: prepared?.branch ?? `manciple/${item.id}`,
-          ...(prepared ? { base_sha: prepared.baseSha, claim_state: prepared.claimState } : {}),
-          prepared: Boolean(prepared),
-        }
-      : {
-          mode: "in_place",
-          control_repo: controlRepo,
-          workspace_path: controlRepo,
-          prepared: true,
-        };
-    return [{
-      task_id: item.id,
-      ownership_boundary: ownershipBoundary(task),
-      reason: item.reason,
-      execution,
-    }];
+    const execution: DispatchPlanExecution =
+      executionMode === "worktree"
+        ? {
+            mode: "worktree",
+            control_repo: controlRepo,
+            workspace_path:
+              prepared?.workspacePath ??
+              `${options.worktreesDir ?? ".manciple/worktrees"}/${item.id}`,
+            branch: prepared?.branch ?? `manciple/${item.id}`,
+            ...(prepared ? { base_sha: prepared.baseSha, claim_state: prepared.claimState } : {}),
+            prepared: Boolean(prepared),
+          }
+        : {
+            mode: "in_place",
+            control_repo: controlRepo,
+            workspace_path: controlRepo,
+            prepared: true,
+          };
+    return [
+      {
+        task_id: item.id,
+        ownership_boundary: ownershipBoundary(task),
+        reason: item.reason,
+        execution,
+      },
+    ];
   });
 
   const deferredRows: Array<[Exclude<CoordinatorSection, "runnable">, CoordinatorQueueRow[]]> = [
@@ -449,13 +467,15 @@ export function buildDispatchPlan(
     ["rework_needed", queue.reworkNeeded],
   ];
 
-  const doNotDispatch = deferredRows.flatMap(([section, rows]) =>
-    rows.map((item) => ({
-      task_id: item.id,
-      section,
-      reason: item.reason,
-    }))
-  ).concat(claimedDeferrals);
+  const doNotDispatch = deferredRows
+    .flatMap(([section, rows]) =>
+      rows.map((item) => ({
+        task_id: item.id,
+        section,
+        reason: item.reason,
+      })),
+    )
+    .concat(claimedDeferrals);
 
   const verificationEntries = assignments.map((assignment) => {
     const task = activeTaskById.get(assignment.task_id);
@@ -465,9 +485,7 @@ export function buildDispatchPlan(
     };
   });
 
-  const batchCommands = Array.from(
-    new Set(verificationEntries.flatMap((entry) => entry.commands))
-  );
+  const batchCommands = Array.from(new Set(verificationEntries.flatMap((entry) => entry.commands)));
 
   return {
     execution_mode: executionMode,

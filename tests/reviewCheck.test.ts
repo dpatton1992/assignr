@@ -1,15 +1,22 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stringify } from "yaml";
 
 import { initCommand } from "../src/commands/init.js";
-import { reviewCheckCommand } from "../src/commands/reviewCheck.js";
 import { renderReviewPrompt } from "../src/commands/review.js";
+import { reviewCheckCommand } from "../src/commands/reviewCheck.js";
 import { runLogCommand } from "../src/commands/runLog.js";
-import { getPaths } from "../src/utils/paths.js";
 import type { TaskSpec } from "../src/specs/schema.js";
+import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
@@ -33,6 +40,14 @@ function writeTask(id: string, overrides: Partial<TaskSpec> = {}): void {
     domain: "core",
     priority: "medium",
     depends_on: [],
+    blocks: [],
+    conflicts_with: [],
+    can_run_independently: true,
+    path_ownership: {
+      touched_paths: [],
+      locked_paths: [],
+      unsafe_parallel_areas: [],
+    },
     allowed_paths: ["src/commands/reviewCheck.ts", "tests/reviewCheck.test.ts"],
     forbidden_paths: ["dist/"],
     goal: "Check review evidence.",
@@ -58,14 +73,19 @@ function writeCompleteRunLog(taskId: string): void {
     decisionsMade: ["Review evidence is checked before approval."],
     risks: "none",
     followUps: ["none"],
-    acceptanceCriteriaEvidence: ["Review evidence is checked.: Complete receipt covers review check."],
+    acceptanceCriteriaEvidence: [
+      "Review evidence is checked.: Complete receipt covers review check.",
+    ],
   });
 }
 
 function appendTokenEstimateSection(taskId: string, section: string): void {
   const runLogFile = join(
     p.runs,
-    readdirSync(p.runs).filter((file) => file.endsWith(`-${taskId}.md`)).sort().at(-1) ?? ""
+    readdirSync(p.runs)
+      .filter((file) => file.endsWith(`-${taskId}.md`))
+      .sort()
+      .at(-1) ?? "",
   );
   appendFileSync(runLogFile, `\n\n## Token Estimate\n\n${section}\n`, "utf-8");
 }
@@ -86,6 +106,14 @@ describe("reviewCheckCommand", () => {
       domain: "core",
       priority: "medium",
       depends_on: [],
+      blocks: [],
+      conflicts_with: [],
+      can_run_independently: true,
+      path_ownership: {
+        touched_paths: [],
+        locked_paths: [],
+        unsafe_parallel_areas: [],
+      },
       allowed_paths: ["src/commands/review.ts"],
       forbidden_paths: ["dist/"],
       goal: "Review budget warning evidence.",
@@ -97,10 +125,12 @@ describe("reviewCheckCommand", () => {
       notes: [],
     };
 
-    expect(renderReviewPrompt(task, cwd, {
-      includeRunLog: false,
-      includeGitDiff: false,
-    })).toContain("- [ ] Budget warning present but warning-only behavior confirmed.");
+    expect(
+      renderReviewPrompt(task, cwd, {
+        includeRunLog: false,
+        includeGitDiff: false,
+      }),
+    ).toContain("- [ ] Budget warning present but warning-only behavior confirmed.");
   });
 
   it("exits zero and prints ready rows when all needs_review tasks are ready", () => {
@@ -110,7 +140,9 @@ describe("reviewCheckCommand", () => {
     writeCompleteRunLog("ready-two");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -134,7 +166,9 @@ describe("reviewCheckCommand", () => {
     writeTask("missing-evidence");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -163,21 +197,27 @@ describe("reviewCheckCommand", () => {
         "- estimated: true",
         "- method: ceil(characters / 4)",
         "Budget warning: over budget (15804/4000 estimated tokens).",
-      ].join("\n")
+      ].join("\n"),
     );
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     try {
-      expect(() => reviewCheckCommand(p.tasksActive, cwd, "budget-warning-needs-attention")).toThrow("process.exit(1)");
+      expect(() =>
+        reviewCheckCommand(p.tasksActive, cwd, "budget-warning-needs-attention"),
+      ).toThrow("process.exit(1)");
       expect(exitSpy).toHaveBeenCalledWith(1);
 
       const output = logSpy.mock.calls.flat().join("\n");
       expect(output).toContain("budget-warning-needs-attention");
-      expect(output).toContain("Over-budget token estimate needs review evidence confirming budget overages are warning-only.");
+      expect(output).toContain(
+        "Over-budget token estimate needs review evidence confirming budget overages are warning-only.",
+      );
       expect(output).not.toContain("Verification command(s) appear to have failed");
     } finally {
       logSpy.mockRestore();
@@ -191,7 +231,9 @@ describe("reviewCheckCommand", () => {
     writeCompleteRunLog("selected-ready");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -214,18 +256,22 @@ describe("reviewCheckCommand", () => {
     writeGeneratedPrompts("deterministic-ready");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     try {
-      expect(() => reviewCheckCommand(p.tasksActive, cwd, undefined, {
-        deterministic: true,
-        generatedDir: p.promptsGenerated,
-        activeDir: p.tasksActive,
-        completedDir: p.tasksCompleted,
-        archivedDir: p.tasksArchived,
-      })).not.toThrow();
+      expect(() =>
+        reviewCheckCommand(p.tasksActive, cwd, undefined, {
+          deterministic: true,
+          generatedDir: p.promptsGenerated,
+          activeDir: p.tasksActive,
+          completedDir: p.tasksCompleted,
+          archivedDir: p.tasksArchived,
+        }),
+      ).not.toThrow();
       expect(exitSpy).not.toHaveBeenCalled();
       expect(logSpy.mock.calls.flat().join("\n")).toContain("deterministic-ready");
     } finally {
@@ -238,23 +284,31 @@ describe("reviewCheckCommand", () => {
     writeTask("deterministic-missing");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     try {
-      expect(() => reviewCheckCommand(p.tasksActive, cwd, "deterministic-missing", {
-        deterministic: true,
-        generatedDir: p.promptsGenerated,
-        activeDir: p.tasksActive,
-        completedDir: p.tasksCompleted,
-        archivedDir: p.tasksArchived,
-      })).toThrow("process.exit(1)");
+      expect(() =>
+        reviewCheckCommand(p.tasksActive, cwd, "deterministic-missing", {
+          deterministic: true,
+          generatedDir: p.promptsGenerated,
+          activeDir: p.tasksActive,
+          completedDir: p.tasksCompleted,
+          archivedDir: p.tasksArchived,
+        }),
+      ).toThrow("process.exit(1)");
       const output = logSpy.mock.calls.flat().join("\n");
       expect(output).toContain("deterministic-missing");
       expect(output).toContain("No verification commands are recorded in the run log.");
-      expect(output).toContain("No generated implementation prompt found for deterministic-missing.");
-      expect(output).toContain("No review prompt or review outcome log found for deterministic-missing.");
+      expect(output).toContain(
+        "No generated implementation prompt found for deterministic-missing.",
+      );
+      expect(output).toContain(
+        "No review prompt or review outcome log found for deterministic-missing.",
+      );
     } finally {
       logSpy.mockRestore();
       exitSpy.mockRestore();
@@ -267,52 +321,61 @@ describe("reviewCheckCommand", () => {
     mkdirSync(p.tasksCompleted, { recursive: true });
     writeFileSync(
       join(p.tasksCompleted, "wrong-tier.yaml"),
-      stringify({
-        id: "wrong-tier",
-        title: "wrong-tier",
-        status: "needs_review",
-        type: "implementation",
-        domain: "core",
-        priority: "medium",
-        depends_on: [],
-        allowed_paths: ["src/"],
-        forbidden_paths: [],
-        goal: "Wrong tier.",
-        acceptance_criteria: ["It is detected."],
-        verification: { commands: ["pnpm test"] },
-        outputs_required: ["files_changed"],
-        notes: [],
-      }, { lineWidth: 0 }),
-      "utf-8"
+      stringify(
+        {
+          id: "wrong-tier",
+          title: "wrong-tier",
+          status: "needs_review",
+          type: "implementation",
+          domain: "core",
+          priority: "medium",
+          depends_on: [],
+          allowed_paths: ["src/"],
+          forbidden_paths: [],
+          goal: "Wrong tier.",
+          acceptance_criteria: ["It is detected."],
+          verification: { commands: ["pnpm test"] },
+          outputs_required: ["files_changed"],
+          notes: [],
+        },
+        { lineWidth: 0 },
+      ),
+      "utf-8",
     );
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     try {
-      expect(() => reviewCheckCommand(p.tasksActive, cwd, "wrong-status", {
-        deterministic: true,
-        generatedDir: p.promptsGenerated,
-        activeDir: p.tasksActive,
-        completedDir: p.tasksCompleted,
-        archivedDir: p.tasksArchived,
-      })).toThrow("process.exit(1)");
+      expect(() =>
+        reviewCheckCommand(p.tasksActive, cwd, "wrong-status", {
+          deterministic: true,
+          generatedDir: p.promptsGenerated,
+          activeDir: p.tasksActive,
+          completedDir: p.tasksCompleted,
+          archivedDir: p.tasksArchived,
+        }),
+      ).toThrow("process.exit(1)");
       let output = logSpy.mock.calls.flat().join("\n");
       expect(output).toContain("status-mismatch");
 
       logSpy.mockClear();
-      expect(() => reviewCheckCommand(p.tasksActive, cwd, "wrong-tier", {
-        deterministic: true,
-        generatedDir: p.promptsGenerated,
-        activeDir: p.tasksActive,
-        completedDir: p.tasksCompleted,
-        archivedDir: p.tasksArchived,
-      })).toThrow("process.exit(1)");
+      expect(() =>
+        reviewCheckCommand(p.tasksActive, cwd, "wrong-tier", {
+          deterministic: true,
+          generatedDir: p.promptsGenerated,
+          activeDir: p.tasksActive,
+          completedDir: p.tasksCompleted,
+          archivedDir: p.tasksArchived,
+        }),
+      ).toThrow("process.exit(1)");
       output = logSpy.mock.calls.flat().join("\n");
       expect(output).toContain("lifecycle-placement");
-      expect(output).toContain("Task with status \"needs_review\" belongs in");
+      expect(output).toContain('Task with status "needs_review" belongs in');
     } finally {
       logSpy.mockRestore();
       exitSpy.mockRestore();
@@ -333,22 +396,28 @@ describe("reviewCheckCommand", () => {
       decisionsMade: ["Review evidence is checked before approval."],
       risks: "none",
       followUps: ["none"],
-      acceptanceCriteriaEvidence: ["Review evidence is checked.: Complete receipt covers review check."],
+      acceptanceCriteriaEvidence: [
+        "Review evidence is checked.: Complete receipt covers review check.",
+      ],
     });
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     try {
-      expect(() => reviewCheckCommand(p.tasksActive, cwd, "path-violation", {
-        deterministic: true,
-        generatedDir: p.promptsGenerated,
-        activeDir: p.tasksActive,
-        completedDir: p.tasksCompleted,
-        archivedDir: p.tasksArchived,
-      })).toThrow("process.exit(1)");
+      expect(() =>
+        reviewCheckCommand(p.tasksActive, cwd, "path-violation", {
+          deterministic: true,
+          generatedDir: p.promptsGenerated,
+          activeDir: p.tasksActive,
+          completedDir: p.tasksCompleted,
+          archivedDir: p.tasksArchived,
+        }),
+      ).toThrow("process.exit(1)");
       const output = logSpy.mock.calls.flat().join("\n");
       expect(output).toContain("Changed file README.md is outside allowed_paths.");
       expect(output).toContain("Changed file dist/index.js matches forbidden_paths entry dist/.");
@@ -360,11 +429,7 @@ describe("reviewCheckCommand", () => {
 
   it("reports claimed-path overlap as an advisory without failing the gate", () => {
     writeTask("target-overlap", {
-      allowed_paths: [
-        "src/review/",
-        "src/commands/reviewCheck.ts",
-        "tests/reviewCheck.test.ts",
-      ],
+      allowed_paths: ["src/review/", "src/commands/reviewCheck.ts", "tests/reviewCheck.test.ts"],
     });
     writeTask("owner-overlap", {
       status: "in_progress",
@@ -379,18 +444,22 @@ describe("reviewCheckCommand", () => {
     writeGeneratedPrompts("target-overlap");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     try {
-      expect(() => reviewCheckCommand(p.tasksActive, cwd, "target-overlap", {
-        deterministic: true,
-        generatedDir: p.promptsGenerated,
-        activeDir: p.tasksActive,
-        completedDir: p.tasksCompleted,
-        archivedDir: p.tasksArchived,
-      })).not.toThrow();
+      expect(() =>
+        reviewCheckCommand(p.tasksActive, cwd, "target-overlap", {
+          deterministic: true,
+          generatedDir: p.promptsGenerated,
+          activeDir: p.tasksActive,
+          completedDir: p.tasksCompleted,
+          archivedDir: p.tasksArchived,
+        }),
+      ).not.toThrow();
       expect(exitSpy).not.toHaveBeenCalled();
       const output = logSpy.mock.calls.flat().join("\n");
       expect(output).toContain("pass");

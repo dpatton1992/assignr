@@ -1,6 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
-import { dirname, join, relative } from "path";
-import { fileURLToPath } from "url";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import picocolors from "picocolors";
 
 interface InstallAssetsOptions {
@@ -55,25 +55,31 @@ export function installAssetsCommand(options: InstallAssetsOptions): void {
     const targetDir = join(cwd, asset.target);
 
     if (!existsSync(sourceDir)) {
-      console.log(`  ${picocolors.yellow('-')} ${asset.target}/ (not available in package)`);
+      console.log(`  ${picocolors.yellow("-")} ${asset.target}/ (not available in package)`);
       continue;
     }
 
     const copied = copyDir(sourceDir, targetDir, cwd, force);
     if (copied > 0) {
-      console.log(`  ${picocolors.green('✓')} ${asset.target}/ (${copied} file${copied === 1 ? "" : "s"})`);
+      console.log(
+        `  ${picocolors.green("✓")} ${asset.target}/ (${copied} file${copied === 1 ? "" : "s"})`,
+      );
     } else {
       const alreadyExists = existsSync(targetDir) && readdirSync(targetDir).length > 0;
       if (alreadyExists) {
-        console.log(`  ${picocolors.yellow('-')} ${asset.target}/ (already exists, use --force to overwrite)`);
+        console.log(
+          `  ${picocolors.yellow("-")} ${asset.target}/ (already exists, use --force to overwrite)`,
+        );
       }
     }
     totalFiles += copied;
   }
 
   if (totalFiles > 0) {
-    console.log(`\n  ${picocolors.green(picocolors.bold(`Installed ${totalFiles} asset file${totalFiles === 1 ? "" : "s"}.`))}`);
+    console.log(
+      `\n  ${picocolors.green(picocolors.bold(`Installed ${totalFiles} asset file${totalFiles === 1 ? "" : "s"}.`))}`,
+    );
   } else {
-    console.log(`\n  ${picocolors.dim('No new assets to install.')}`);
+    console.log(`\n  ${picocolors.dim("No new assets to install.")}`);
   }
 }

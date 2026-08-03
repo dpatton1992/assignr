@@ -1,8 +1,8 @@
-import { writeFileSync, mkdirSync, existsSync } from "fs";
-import { join, basename } from "path";
-import { spawnSync } from "child_process";
-import { loadTasks } from "../specs/loadTasks.js";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { findLatestRunLogPath, markRunLogSuperseded } from "../review/evidence.js";
+import { loadTasks } from "../specs/loadTasks.js";
 import { findManagedWorktreeByWorkspace } from "../worktrees/manager.js";
 
 export interface RunLogOptions {
@@ -91,7 +91,7 @@ function parseGitStatus(output: string): string[] {
     .map((line) => line.slice(3).trim())
     .map((path) => {
       const renameMarker = " -> ";
-      return path.includes(renameMarker) ? path.split(renameMarker).pop() ?? path : path;
+      return path.includes(renameMarker) ? (path.split(renameMarker).pop() ?? path) : path;
     })
     .filter(Boolean);
 }
@@ -108,16 +108,17 @@ export function detectChangedFiles(cwd: string, baseSha?: string): AutoDetectedF
       ["diff", "--cached", "--name-only"],
       ["ls-files", "--others", "--exclude-standard"],
     ];
-    const files = unique(commands.flatMap((args) => {
-      const result = spawnSync("git", args, { cwd, encoding: "utf-8" });
-      return result.status === 0 ? (result.stdout ?? "").split("\n") : [];
-    }));
+    const files = unique(
+      commands.flatMap((args) => {
+        const result = spawnSync("git", args, { cwd, encoding: "utf-8" });
+        return result.status === 0 ? (result.stdout ?? "").split("\n") : [];
+      }),
+    );
     return {
       files,
       source: `auto-detected from managed worktree diff since ${baseSha}`,
-      fallback: files.length > 0
-        ? ""
-        : `No changed files detected since managed worktree base ${baseSha}.`,
+      fallback:
+        files.length > 0 ? "" : `No changed files detected since managed worktree base ${baseSha}.`,
     };
   }
 
@@ -131,9 +132,7 @@ export function detectChangedFiles(cwd: string, baseSha?: string): AutoDetectedF
     return {
       files,
       source: "auto-detected from git status",
-      fallback: files.length > 0
-        ? ""
-        : "No changed files detected by git status.",
+      fallback: files.length > 0 ? "" : "No changed files detected by git status.",
     };
   }
 
@@ -147,9 +146,7 @@ export function detectChangedFiles(cwd: string, baseSha?: string): AutoDetectedF
     return {
       files,
       source: "auto-detected from git diff --name-only",
-      fallback: files.length > 0
-        ? ""
-        : "No changed files detected by git diff --name-only.",
+      fallback: files.length > 0 ? "" : "No changed files detected by git diff --name-only.",
     };
   }
 
@@ -174,39 +171,39 @@ export function buildRunLog(
   status: string,
   generatedDir: string,
   cwd: string,
-  options: RunLogOptions = {}
+  options: RunLogOptions = {},
 ): string {
   const promptPath = `${generatedDir}/${id}.md`;
   const branch = currentBranch(cwd);
   const finalStatus = options.taskStatus ?? status;
   const detected = detectChangedFiles(cwd, options.gitBaseSha);
   const filesChanged = options.filesChanged?.length
-    ? renderList(unique(options.filesChanged), "provided by user", "Unknown: no changed files were provided.")
+    ? renderList(
+        unique(options.filesChanged),
+        "provided by user",
+        "Unknown: no changed files were provided.",
+      )
     : renderList(detected.files, detected.source, detected.fallback);
   const commandsRun = renderList(
     options.commandsRun,
     "provided by user",
-    "Unknown: no commands were provided. Pass repeated --command flags or MCP commands_run values."
+    "Unknown: no commands were provided. Pass repeated --command flags or MCP commands_run values.",
   );
   const testsRun = renderList(
     options.testsRun,
     "provided by user",
-    "Unknown: no tests were provided. Pass test commands in tests_run or provide a deterministic verify receipt."
+    "Unknown: no tests were provided. Pass test commands in tests_run or provide a deterministic verify receipt.",
   );
   const decisionsMade = renderList(
     options.decisionsMade,
     "provided by user",
-    "Unknown: no decisions were provided. Completed implementation work that changed behavior must record Decisions Made; omit only when blocked before meaningful changes."
+    "Unknown: no decisions were provided. Completed implementation work that changed behavior must record Decisions Made; omit only when blocked before meaningful changes.",
   );
-  const followUps = renderList(
-    options.followUps,
-    "provided by user",
-    "Unknown: not provided."
-  );
+  const followUps = renderList(options.followUps, "provided by user", "Unknown: not provided.");
   const acceptanceCriteriaEvidence = renderList(
     options.acceptanceCriteriaEvidence,
     "provided by user",
-    "Unknown: not provided."
+    "Unknown: not provided.",
   );
   const verifyReceipt = options.verifyReceipt
     ? `_Source: provided by user_\n\n${options.verifyReceipt}`
@@ -221,7 +218,9 @@ export function buildRunLog(
     options.inputTokens !== undefined ? `- Input tokens: ${options.inputTokens}` : undefined,
     options.outputTokens !== undefined ? `- Output tokens: ${options.outputTokens}` : undefined,
     options.totalTokens !== undefined ? `- Total tokens: ${options.totalTokens}` : undefined,
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
   const costEvidence = options.costUsd !== undefined ? `- Cost USD: ${options.costUsd}` : "";
 
   const supersedesLine = options.supersedes
@@ -239,7 +238,9 @@ export function buildRunLog(
 - Model (${modelSource}): ${options.model ?? "Unknown: not provided."}
 - Branch: ${branch}
 ${supersedesLine}
-${tokenEvidence || costEvidence ? `
+${
+  tokenEvidence || costEvidence
+    ? `
 ## Usage Evidence
 
 ${tokenEvidence || "_Source: unknown_\n\nUnknown: no token evidence was provided."}
@@ -247,7 +248,9 @@ ${tokenEvidence || "_Source: unknown_\n\nUnknown: no token evidence was provided
 ## Cost Evidence
 
 ${costEvidence || "_Source: unknown_\n\nUnknown: no cost evidence was provided."}
-` : ""}
+`
+    : ""
+}
 
 ## Prompt Used
 
@@ -308,7 +311,7 @@ export function runLogCommand(
   runsDir: string,
   generatedDir: string,
   cwd: string,
-  options: RunLogOptions = {}
+  options: RunLogOptions = {},
 ): void {
   const { tasks, errors } = loadTasks(specsTasksDir);
 
@@ -319,9 +322,7 @@ export function runLogCommand(
   const found = tasks.find((t) => t.spec.id === taskId);
 
   if (!found) {
-    console.error(
-      `Task not found: ${taskId}\nRun "manciple status" to see available tasks.`
-    );
+    console.error(`Task not found: ${taskId}\nRun "manciple status" to see available tasks.`);
     process.exit(1);
   }
 
@@ -353,7 +354,7 @@ export function runLogCommand(
   );
 
   writeFileSync(outPath, content, "utf-8");
-  console.log(`Created run log: ${outPath.replace(cwd + "/", "")}`);
+  console.log(`Created run log: ${outPath.replace(`${cwd}/`, "")}`);
 
   // Mark the previous latest as superseded
   if (existingLatest) {

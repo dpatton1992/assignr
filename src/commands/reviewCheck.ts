@@ -1,19 +1,17 @@
 import picocolors from "picocolors";
-import { loadTasks } from "../specs/loadTasks.js";
-import { evaluateReviewReadiness } from "../review/readiness.js";
+import type {
+  DeterministicReviewBlocker,
+  DeterministicReviewBlockerKind,
+} from "../review/deterministicGate.js";
+import { evaluateDeterministicReviewGate } from "../review/deterministicGate.js";
 import {
   parseRunLogEvidence,
   readGitChangedFiles,
   readLatestRunLogContent,
 } from "../review/evidence.js";
-import { evaluateDeterministicReviewGate } from "../review/deterministicGate.js";
-import type { DeterministicReviewBlocker, DeterministicReviewBlockerKind } from "../review/deterministicGate.js";
-import {
-  headerBanner,
-  colorForStatus,
-  statusSymbol,
-  styleCell,
-} from "../utils/styling.js";
+import { evaluateReviewReadiness } from "../review/readiness.js";
+import { loadTasks } from "../specs/loadTasks.js";
+import { headerBanner, styleCell } from "../utils/styling.js";
 
 export interface ReviewCheckCommandOptions {
   deterministic?: boolean;
@@ -26,7 +24,9 @@ export interface ReviewCheckCommandOptions {
 
 function printTableHeader(idWidth: number, statusWidth: number): void {
   const rule = "─".repeat(idWidth + statusWidth + 4);
-  console.log(`  ${styleCell("TASK", undefined, idWidth)}  ${styleCell("STATUS", undefined, statusWidth)}  SCORE  HUMAN REVIEW  DETAILS`);
+  console.log(
+    `  ${styleCell("TASK", undefined, idWidth)}  ${styleCell("STATUS", undefined, statusWidth)}  SCORE  HUMAN REVIEW  DETAILS`,
+  );
   console.log(`  ${rule}`);
 }
 
@@ -36,7 +36,7 @@ function formatScore(score: number, width: number = 5): string {
 
 function truncateId(id: string): string {
   if (id.length <= 45) return id;
-  return id.slice(0, 45) + "…";
+  return `${id.slice(0, 45)}…`;
 }
 
 const BLOCKED_KINDS_FOR_DECISION = new Set<DeterministicReviewBlockerKind>([
@@ -50,7 +50,9 @@ const BLOCKED_KINDS_FOR_DECISION = new Set<DeterministicReviewBlockerKind>([
 
 function decisionFor(blockers: DeterministicReviewBlocker[]): "pass" | "escalate" | "blocked" {
   if (blockers.length === 0) return "pass";
-  return blockers.some((blocker) => BLOCKED_KINDS_FOR_DECISION.has(blocker.kind)) ? "blocked" : "escalate";
+  return blockers.some((blocker) => BLOCKED_KINDS_FOR_DECISION.has(blocker.kind))
+    ? "blocked"
+    : "escalate";
 }
 
 function summarizeBlockers(blockers: DeterministicReviewBlocker[]): string {
@@ -59,9 +61,7 @@ function summarizeBlockers(blockers: DeterministicReviewBlocker[]): string {
   for (const blocker of blockers) {
     counts.set(blocker.kind, (counts.get(blocker.kind) ?? 0) + 1);
   }
-  return [...counts.entries()]
-    .map(([kind, count]) => `${count} ${kind}`)
-    .join(", ");
+  return [...counts.entries()].map(([kind, count]) => `${count} ${kind}`).join(", ");
 }
 
 function colorForBlockerKind(kind: DeterministicReviewBlockerKind): (s: string) => string {
@@ -84,7 +84,7 @@ export function reviewCheckCommand(
   specsTasksDir: string,
   cwd: string,
   taskId?: string,
-  options: ReviewCheckCommandOptions = {}
+  options: ReviewCheckCommandOptions = {},
 ): void {
   if (options.deterministic) {
     const report = evaluateDeterministicReviewGate({
@@ -104,7 +104,7 @@ export function reviewCheckCommand(
 
     if (taskId && report.taskReports.length === 0) {
       console.error(
-        `Task not found: ${taskId}\nRun "manciple list --status needs_review" to see review tasks.`
+        `Task not found: ${taskId}\nRun "manciple list --status needs_review" to see review tasks.`,
       );
       process.exit(1);
     }
@@ -162,9 +162,10 @@ export function reviewCheckCommand(
         });
       } else {
         const summary = summarizeBlockers(taskReport.blockers);
-        const gateText = decision === "blocked"
-          ? `${picocolors.red("⊘")} blocked`
-          : `${picocolors.yellow("◐")} escalate`;
+        const gateText =
+          decision === "blocked"
+            ? `${picocolors.red("⊘")} blocked`
+            : `${picocolors.yellow("◐")} escalate`;
         gateEntries.push({
           truncatedId,
           fullId: taskReport.taskId,
@@ -189,9 +190,11 @@ export function reviewCheckCommand(
     }
 
     if (gateEntries.length === 0) {
-      console.log(taskId
-        ? `  No needs_review task matched ${taskId}.`
-        : "  No active needs_review tasks found.");
+      console.log(
+        taskId
+          ? `  No needs_review task matched ${taskId}.`
+          : "  No active needs_review tasks found.",
+      );
       return;
     }
 
@@ -200,10 +203,14 @@ export function reviewCheckCommand(
     const gateLabel = "GATE";
     const gateWidth = Math.max(gateLabel.length, ...gateEntries.map((e) => e.gate.length));
     const rule = "─".repeat(idWidth + gateWidth + 4);
-    console.log(`  ${styleCell("TASK", undefined, idWidth)}  ${styleCell(gateLabel, undefined, gateWidth)}  BLOCKERS`);
+    console.log(
+      `  ${styleCell("TASK", undefined, idWidth)}  ${styleCell(gateLabel, undefined, gateWidth)}  BLOCKERS`,
+    );
     console.log(`  ${rule}`);
     for (const entry of gateEntries) {
-      console.log(`  ${styleCell(entry.truncatedId, undefined, idWidth)}  ${styleCell(entry.gate, undefined, gateWidth)}  ${entry.summary}`);
+      console.log(
+        `  ${styleCell(entry.truncatedId, undefined, idWidth)}  ${styleCell(entry.gate, undefined, gateWidth)}  ${entry.summary}`,
+      );
     }
 
     // Print detail sections for blocked/escalated tasks
@@ -242,20 +249,21 @@ export function reviewCheckCommand(
 
   if (taskId && !tasks.some((task) => task.spec.id === taskId)) {
     console.error(
-      `Task not found: ${taskId}\nRun "manciple list --status needs_review" to see review tasks.`
+      `Task not found: ${taskId}\nRun "manciple list --status needs_review" to see review tasks.`,
     );
     process.exit(1);
   }
 
-  const reviewTasks = tasks.filter((task) => (
-    task.spec.status === "needs_review" &&
-    (!taskId || task.spec.id === taskId)
-  ));
+  const reviewTasks = tasks.filter(
+    (task) => task.spec.status === "needs_review" && (!taskId || task.spec.id === taskId),
+  );
 
   if (reviewTasks.length === 0) {
-    console.log(taskId
-      ? `  No needs_review task matched ${taskId}.`
-      : "  No active needs_review tasks found.");
+    console.log(
+      taskId
+        ? `  No needs_review task matched ${taskId}.`
+        : "  No active needs_review tasks found.",
+    );
     return;
   }
 
@@ -274,9 +282,13 @@ export function reviewCheckCommand(
       }
       const status = report.ready ? "ready" : "missing";
       const detail = report.ready
-        ? report.humanReviewNeeded ? report.humanReviewReasons.join(" ") : "human review not required by evidence checklist"
+        ? report.humanReviewNeeded
+          ? report.humanReviewReasons.join(" ")
+          : "human review not required by evidence checklist"
         : report.missingEvidence.join(" ");
-      console.log(`${status}\t${task.spec.id}\tscore=${report.score}\thuman_review=${report.humanReviewNeeded ? "yes" : "no"}\t${detail}`);
+      console.log(
+        `${status}\t${task.spec.id}\tscore=${report.score}\thuman_review=${report.humanReviewNeeded ? "yes" : "no"}\t${detail}`,
+      );
     }
     if (hasMissingEvidence) {
       process.exit(1);
@@ -301,12 +313,18 @@ export function reviewCheckCommand(
       hasMissingEvidence = true;
     }
 
-    const statusLabel = report.ready ? `${picocolors.green("✓")} ready` : `${picocolors.red("✕")} missing`;
+    const statusLabel = report.ready
+      ? `${picocolors.green("✓")} ready`
+      : `${picocolors.red("✕")} missing`;
     const hrLabel = report.humanReviewNeeded ? picocolors.yellow("yes") : "no";
     const detail = report.ready
-      ? report.humanReviewNeeded ? report.humanReviewReasons.join(" ") : "human review not required by evidence checklist"
+      ? report.humanReviewNeeded
+        ? report.humanReviewReasons.join(" ")
+        : "human review not required by evidence checklist"
       : report.missingEvidence.join(" ");
-    console.log(`  ${styleCell(task.spec.id, undefined, idWidth)}  ${styleCell(statusLabel, undefined, statusWidth)}  ${formatScore(report.score)}  ${styleCell(hrLabel, undefined, 11)}  ${detail}`);
+    console.log(
+      `  ${styleCell(task.spec.id, undefined, idWidth)}  ${styleCell(statusLabel, undefined, statusWidth)}  ${formatScore(report.score)}  ${styleCell(hrLabel, undefined, 11)}  ${detail}`,
+    );
   }
 
   if (hasMissingEvidence) {

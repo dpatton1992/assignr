@@ -15,48 +15,44 @@
  * integration and receipts). They are re-exported here so every CLI lifecycle
  * command delegates through a single lifecycle-facing surface.
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "fs";
-import { basename, dirname, join } from "path";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { parse } from "yaml";
-import { STATUSES } from "../constants.js";
 import type { Status } from "../constants.js";
-import { loadTasks } from "../specs/loadTasks.js";
+import { STATUSES } from "../constants.js";
+import type {
+  ReviewActionOptions,
+  ReviewActionOutcome,
+  ReviewActionResult,
+  ReviewOutcome,
+} from "../review/reviewActions.js";
+import {
+  approveTask,
+  blockReview,
+  ReviewActionError,
+  rejectTask,
+  reopenTask,
+  requestChanges,
+} from "../review/reviewActions.js";
 import type { TaskTier } from "../specs/loadTasks.js";
+import { loadTasks } from "../specs/loadTasks.js";
 import { formatYamlDocument } from "../utils/yamlFormat.js";
 import {
   assertDirectCompletionAllowed,
   isGitRepository,
   setManagedWorktreeState,
 } from "../worktrees/manager.js";
-import {
-  approveTask,
-  blockReview,
-  rejectTask,
-  reopenTask,
-  requestChanges,
-  ReviewActionError,
-} from "../review/reviewActions.js";
-import type {
-  ReviewActionOptions,
-  ReviewActionResult,
-  ReviewActionOutcome,
-  ReviewOutcome,
-} from "../review/reviewActions.js";
 
-export {
-  approveTask,
-  blockReview,
-  rejectTask,
-  reopenTask,
-  requestChanges,
-  ReviewActionError,
-};
-export type {
-  ReviewActionOptions,
-  ReviewActionResult,
-  ReviewActionOutcome,
-  ReviewOutcome,
-};
+export type { ReviewActionOptions, ReviewActionOutcome, ReviewActionResult, ReviewOutcome };
+export { approveTask, blockReview, ReviewActionError, rejectTask, reopenTask, requestChanges };
 
 export type LifecycleErrorCode =
   | "invalid_status"
@@ -104,7 +100,10 @@ function getTasksRoot(tasksDir: string): string {
   const last = basename(tasksDir);
   const parent = dirname(tasksDir);
 
-  if ((last === "active" || last === "completed" || last === "archived") && basename(parent) === "tasks") {
+  if (
+    (last === "active" || last === "completed" || last === "archived") &&
+    basename(parent) === "tasks"
+  ) {
     return parent;
   }
 
@@ -140,7 +139,7 @@ function failure(
   code: LifecycleErrorCode,
   message: string,
   taskId: string,
-  newStatus: Status
+  newStatus: Status,
 ): TaskLifecycleResult {
   return { ok: false, code, message, taskId, previousStatus: "", newStatus, updatedPath: "" };
 }
@@ -154,14 +153,14 @@ function failure(
 export function setTaskStatus(
   taskId: string,
   newStatus: Status,
-  specsTasksDir: string
+  specsTasksDir: string,
 ): TaskLifecycleResult {
   if (!STATUSES.includes(newStatus)) {
     return failure(
       "invalid_status",
       `Invalid status: "${newStatus}". Allowed: ${STATUSES.join(", ")}`,
       taskId,
-      newStatus
+      newStatus,
     );
   }
 
@@ -173,14 +172,14 @@ export function setTaskStatus(
       "task_not_found",
       `Task not found: ${taskId}\nRun "manciple list" to see available tasks.`,
       taskId,
-      newStatus
+      newStatus,
     );
   }
 
   const raw = readFileSync(found.filePath, "utf-8");
   const parsed = parse(raw) as Record<string, unknown>;
-  const previousStatus = String(parsed["status"]);
-  parsed["status"] = newStatus;
+  const previousStatus = String(parsed.status);
+  parsed.status = newStatus;
 
   const destinationTier = tierForStatus(newStatus);
   const destinationDir = join(getTasksRoot(specsTasksDir), destinationTier);
@@ -192,7 +191,7 @@ export function setTaskStatus(
       "duplicate_in_destination_tier",
       `Task ${taskId} already exists in ${destinationTier} tasks.`,
       taskId,
-      newStatus
+      newStatus,
     );
   }
 
@@ -214,7 +213,7 @@ export function setTaskStatus(
 export function setTaskStatusWithLifecycle(
   taskId: string,
   newStatus: Status,
-  options: TaskLifecycleSyncOptions
+  options: TaskLifecycleSyncOptions,
 ): TaskLifecycleResult {
   if (newStatus === "complete") {
     try {
@@ -228,7 +227,7 @@ export function setTaskStatusWithLifecycle(
         "direct_completion_blocked",
         error instanceof Error ? error.message : String(error),
         taskId,
-        newStatus
+        newStatus,
       );
     }
   }
@@ -236,11 +235,15 @@ export function setTaskStatusWithLifecycle(
   const result = setTaskStatus(taskId, newStatus, options.specsTasksDir);
   if (!result.ok) return result;
 
-  const claimState = newStatus === "needs_review"
-    ? "review_ready"
-    : newStatus === "in_progress" || newStatus === "blocked" || newStatus === "partial" || newStatus === "failed"
-      ? "available"
-      : undefined;
+  const claimState =
+    newStatus === "needs_review"
+      ? "review_ready"
+      : newStatus === "in_progress" ||
+          newStatus === "blocked" ||
+          newStatus === "partial" ||
+          newStatus === "failed"
+        ? "available"
+        : undefined;
 
   if (claimState && isGitRepository(options.controlRepo)) {
     try {
@@ -254,7 +257,7 @@ export function setTaskStatusWithLifecycle(
         "claim_sync_failed",
         error instanceof Error ? error.message : String(error),
         taskId,
-        newStatus
+        newStatus,
       );
     }
   }
@@ -278,7 +281,7 @@ export function completeTask(taskId: string, options: CompleteTaskOptions): Task
       "direct_completion_blocked",
       error instanceof Error ? error.message : String(error),
       taskId,
-      "complete"
+      "complete",
     );
   }
 
@@ -286,7 +289,12 @@ export function completeTask(taskId: string, options: CompleteTaskOptions): Task
   const found = tasks.find((task) => task.spec.id === taskId);
 
   if (!found) {
-    return failure("not_in_active", `Task ${taskId} not found in active tasks.`, taskId, "complete");
+    return failure(
+      "not_in_active",
+      `Task ${taskId} not found in active tasks.`,
+      taskId,
+      "complete",
+    );
   }
 
   const destination = join(options.completedDir, `${taskId}.yaml`);
@@ -295,19 +303,25 @@ export function completeTask(taskId: string, options: CompleteTaskOptions): Task
       "duplicate_in_destination_tier",
       `Task ${taskId} already exists in completed. Use manciple reopen first.`,
       taskId,
-      "complete"
+      "complete",
     );
   }
 
   const raw = readFileSync(found.filePath, "utf-8");
   const parsed = parse(raw) as Record<string, unknown>;
-  parsed["status"] = "complete";
+  parsed.status = "complete";
 
   mkdirSync(options.completedDir, { recursive: true });
   writeFileSync(found.filePath, formatYamlDocument(parsed), "utf-8");
   moveTaskFile(found.filePath, destination);
 
-  return { ok: true, taskId, previousStatus: found.spec.status, newStatus: "complete", updatedPath: destination };
+  return {
+    ok: true,
+    taskId,
+    previousStatus: found.spec.status,
+    newStatus: "complete",
+    updatedPath: destination,
+  };
 }
 
 /**
@@ -319,7 +333,12 @@ export function archiveTask(taskId: string, options: ArchiveTaskOptions): TaskLi
   const found = tasks.find((task) => task.spec.id === taskId);
 
   if (!found) {
-    return failure("not_in_active", `Task ${taskId} not found in active tasks.`, taskId, "archived");
+    return failure(
+      "not_in_active",
+      `Task ${taskId} not found in active tasks.`,
+      taskId,
+      "archived",
+    );
   }
 
   const destination = join(options.archivedDir, `${taskId}.yaml`);
@@ -328,17 +347,23 @@ export function archiveTask(taskId: string, options: ArchiveTaskOptions): TaskLi
       "duplicate_in_destination_tier",
       `Task ${taskId} already exists in archived.`,
       taskId,
-      "archived"
+      "archived",
     );
   }
 
   const raw = readFileSync(found.filePath, "utf-8");
   const parsed = parse(raw) as Record<string, unknown>;
-  parsed["status"] = "archived";
+  parsed.status = "archived";
 
   mkdirSync(options.archivedDir, { recursive: true });
   writeFileSync(found.filePath, formatYamlDocument(parsed), "utf-8");
   moveTaskFile(found.filePath, destination);
 
-  return { ok: true, taskId, previousStatus: found.spec.status, newStatus: "archived", updatedPath: destination };
+  return {
+    ok: true,
+    taskId,
+    previousStatus: found.spec.status,
+    newStatus: "archived",
+    updatedPath: destination,
+  };
 }

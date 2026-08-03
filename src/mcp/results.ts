@@ -14,7 +14,7 @@ export function errorResult(message: string): CallToolResult {
 }
 
 export async function toolResult(
-  fn: () => CallToolResult | Promise<CallToolResult>
+  fn: () => CallToolResult | Promise<CallToolResult>,
 ): Promise<CallToolResult> {
   try {
     return await fn();

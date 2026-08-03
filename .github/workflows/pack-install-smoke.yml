@@ -17,7 +17,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.32.1
+          version: 11.20.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -32,9 +32,10 @@ jobs:
         env:
           NO_COLOR: "1"
         run: |
-          pnpm typecheck
+          pnpm run lint
+          pnpm run typecheck
+          pnpm run build
           pnpm test
-          pnpm build
 
       - name: Pack package and install CLI globally
         run: |

@@ -1,8 +1,8 @@
+import { relative } from "node:path";
 import type { Command } from "commander";
-import { relative } from "path";
 import { loadTasks } from "../specs/loadTasks.js";
-import { setTaskStatus } from "./setStatus.js";
 import type { ManciplePaths } from "../utils/paths.js";
+import type { ManagedWorktreeRecord, WorktreeServiceOptions } from "../worktrees/manager.js";
 import {
   getManagedWorktree,
   listManagedWorktrees,
@@ -11,7 +11,7 @@ import {
   releaseManagedWorktree,
   removeManagedWorktree,
 } from "../worktrees/manager.js";
-import type { ManagedWorktreeRecord, WorktreeServiceOptions } from "../worktrees/manager.js";
+import { setTaskStatus } from "./setStatus.js";
 
 export interface WorktreeCommandOptions {
   cwd: string;
@@ -58,7 +58,10 @@ function cliAction(action: () => void): void {
   }
 }
 
-export function worktreeCommand(taskId: string, options: WorktreeCommandOptions): ManagedWorktreeRecord {
+export function worktreeCommand(
+  taskId: string,
+  options: WorktreeCommandOptions,
+): ManagedWorktreeRecord {
   const shouldStart = isPending(taskId, options);
   const record = prepareManagedWorktree(taskId, { ...serviceOptions(options), claim: true });
   if (shouldStart) setTaskStatus(taskId, "in_progress", options.specsTasksDir);
@@ -91,7 +94,9 @@ export function registerWorktreeCommands(program: Command, p: ManciplePaths, cwd
     .command("create <task-id>")
     .description("Create or claim a task-specific worktree.")
     .action((taskId: string) => {
-      cliAction(() => { worktreeCommand(taskId, shared); });
+      cliAction(() => {
+        worktreeCommand(taskId, shared);
+      });
     });
 
   group
@@ -100,11 +105,15 @@ export function registerWorktreeCommands(program: Command, p: ManciplePaths, cwd
     .option("--json", "Print stable JSON.", false)
     .action((opts: { json: boolean }) => {
       cliAction(() => {
-        const rows = listManagedWorktrees(serviceOptions(shared)).map((record) => display(record, cwd));
+        const rows = listManagedWorktrees(serviceOptions(shared)).map((record) =>
+          display(record, cwd),
+        );
         if (opts.json) return console.log(JSON.stringify(rows, null, 2));
         if (rows.length === 0) return console.log("No managed worktrees.");
         for (const row of rows) {
-          console.log(`${row.task_id}\t${row.claim_state}\t${row.branch}\t${row.workspace_relative}`);
+          console.log(
+            `${row.task_id}\t${row.claim_state}\t${row.branch}\t${row.workspace_relative}`,
+          );
         }
       });
     });

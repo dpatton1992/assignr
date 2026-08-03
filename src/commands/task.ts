@@ -1,19 +1,19 @@
-import { readFileSync } from "fs";
+import { readFileSync } from "node:fs";
 import type { Command } from "commander";
-import { TASK_TYPES, PRIORITIES, STATUSES } from "../constants.js";
-import type { TaskType, Priority, Status } from "../constants.js";
-import { newCommand, newInteractiveCommand } from "./new.js";
-import { listCommand } from "./list.js";
-import { statusCommand } from "./status.js";
-import { setStatusCommand } from "./setStatus.js";
-import { completeCommand } from "./complete.js";
-import { archiveCommand } from "./archive.js";
-import { reopenCommand } from "./reopen.js";
+import { loadConfig } from "../config.js";
+import type { Priority, Status, TaskType } from "../constants.js";
+import { PRIORITIES, STATUSES, TASK_TYPES } from "../constants.js";
 import { loadTasks } from "../specs/loadTasks.js";
 import type { ManciplePaths } from "../utils/paths.js";
-import { loadConfig } from "../config.js";
-import { worktreeCommand } from "./worktree.js";
 import { assertInPlaceExecutionAllowed } from "../worktrees/manager.js";
+import { archiveCommand } from "./archive.js";
+import { completeCommand } from "./complete.js";
+import { listCommand } from "./list.js";
+import { newCommand, newInteractiveCommand } from "./new.js";
+import { reopenCommand } from "./reopen.js";
+import { setStatusCommand } from "./setStatus.js";
+import { statusCommand } from "./status.js";
+import { worktreeCommand } from "./worktree.js";
 
 function collect(value: string, previous: string[]): string[] {
   previous.push(value);
@@ -28,7 +28,7 @@ export function registerTaskCommands(
   program: Command,
   p: ManciplePaths,
   cwd: string,
-  options: RegisterTaskCommandsOptions = {}
+  options: RegisterTaskCommandsOptions = {},
 ): void {
   const task = program
     .command("task")
@@ -45,34 +45,44 @@ export function registerTaskCommands(
     .option("--domain <domain>", "Domain for this task.", "core")
     .option("--priority <priority>", `Priority (${PRIORITIES.join(", ")})`, "medium")
     .option("--goal <goal>", "Pre-fill the goal field.")
-    .option("--implementation-note <note>", "Behavior, product, or design constraint. May be repeated.", collect, [])
-    .action((title: string, opts: {
-      type: string;
-      domain: string;
-      priority: string;
-      goal?: string;
-      implementationNote: string[];
-    }) => {
-      const type = opts.type as TaskType;
-      const priority = opts.priority as Priority;
-      if (!TASK_TYPES.includes(type)) {
-        console.error(`Invalid type: "${type}". Allowed: ${TASK_TYPES.join(", ")}`);
-        process.exit(1);
-      }
-      if (!PRIORITIES.includes(priority)) {
-        console.error(`Invalid priority: "${priority}". Allowed: ${PRIORITIES.join(", ")}`);
-        process.exit(1);
-      }
-      newCommand(title, {
-        type,
-        domain: opts.domain,
-        priority,
-        goal: opts.goal,
-        cwd,
-        activeDir: p.tasksActive,
-        implementationNotes: opts.implementationNote,
-      });
-    });
+    .option(
+      "--implementation-note <note>",
+      "Behavior, product, or design constraint. May be repeated.",
+      collect,
+      [],
+    )
+    .action(
+      (
+        title: string,
+        opts: {
+          type: string;
+          domain: string;
+          priority: string;
+          goal?: string;
+          implementationNote: string[];
+        },
+      ) => {
+        const type = opts.type as TaskType;
+        const priority = opts.priority as Priority;
+        if (!TASK_TYPES.includes(type)) {
+          console.error(`Invalid type: "${type}". Allowed: ${TASK_TYPES.join(", ")}`);
+          process.exit(1);
+        }
+        if (!PRIORITIES.includes(priority)) {
+          console.error(`Invalid priority: "${priority}". Allowed: ${PRIORITIES.join(", ")}`);
+          process.exit(1);
+        }
+        newCommand(title, {
+          type,
+          domain: opts.domain,
+          priority,
+          goal: opts.goal,
+          cwd,
+          activeDir: p.tasksActive,
+          implementationNotes: opts.implementationNote,
+        });
+      },
+    );
 
   // manciple task list
   task
@@ -82,25 +92,30 @@ export function registerTaskCommands(
     .option("--domain <domain>", "Show only tasks in this exact domain (case-sensitive).")
     .option("--completed", "Show completed tasks. Mutually exclusive with --archived and --all.")
     .option("--archived", "Show archived tasks. Mutually exclusive with --completed and --all.")
-    .option("--all", "Show active, completed, and archived tasks. Mutually exclusive with --completed and --archived.")
+    .option(
+      "--all",
+      "Show active, completed, and archived tasks. Mutually exclusive with --completed and --archived.",
+    )
     .option("--group-by <field>", 'Group tasks by "status", "domain", or "tier".')
-    .action((opts: {
-      status?: string;
-      domain?: string;
-      completed?: boolean;
-      archived?: boolean;
-      all?: boolean;
-      groupBy?: string;
-    }) => {
-      listCommand(p.specsTasks, cwd, {
-        status: opts.status,
-        domain: opts.domain,
-        completed: opts.completed,
-        archived: opts.archived,
-        all: opts.all,
-        groupBy: opts.groupBy as "status" | "domain" | "tier" | undefined,
-      });
-    });
+    .action(
+      (opts: {
+        status?: string;
+        domain?: string;
+        completed?: boolean;
+        archived?: boolean;
+        all?: boolean;
+        groupBy?: string;
+      }) => {
+        listCommand(p.specsTasks, cwd, {
+          status: opts.status,
+          domain: opts.domain,
+          completed: opts.completed,
+          archived: opts.archived,
+          all: opts.all,
+          groupBy: opts.groupBy as "status" | "domain" | "tier" | undefined,
+        });
+      },
+    );
 
   // manciple task show <task-id>
   task
@@ -150,7 +165,7 @@ export function registerTaskCommands(
     .command("pause <task-id>")
     .description("Pause a task (set status to blocked). Requires --reason.")
     .requiredOption("--reason <text>", "Reason for pausing.")
-    .action((taskId: string, opts: { reason: string }) => {
+    .action((taskId: string, _opts: { reason: string }) => {
       setStatusCommand(taskId, "blocked" as Status, p.specsTasks, cwd);
     });
 
@@ -227,49 +242,71 @@ export function registerTaskCommands(
     .option("--domain <domain>", "Domain for this task.", "core")
     .option("--priority <priority>", `Priority (${PRIORITIES.join(", ")})`, "medium")
     .option("--goal <goal>", "Pre-fill the goal field.")
-    .option("--implementation-note <note>", "Behavior, product, or design constraint. May be repeated.", collect, [])
+    .option(
+      "--implementation-note <note>",
+      "Behavior, product, or design constraint. May be repeated.",
+      collect,
+      [],
+    )
     .option("--interactive", "Prompt for task fields.", false)
-    .action((title: string | undefined, opts: {
-      type: string;
-      domain: string;
-      priority: string;
-      goal?: string;
-      implementationNote: string[];
-      interactive: boolean;
-    }) => {
-      const action = async () => {
-        if (!title && !opts.interactive) {
-          throw new Error("error: missing required argument 'title'");
-        }
+    .action(
+      (
+        title: string | undefined,
+        opts: {
+          type: string;
+          domain: string;
+          priority: string;
+          goal?: string;
+          implementationNote: string[];
+          interactive: boolean;
+        },
+      ) => {
+        const action = async () => {
+          if (!title && !opts.interactive) {
+            throw new Error("error: missing required argument 'title'");
+          }
 
-        const type = opts.type as TaskType;
-        const priority = opts.priority as Priority;
-        if (!TASK_TYPES.includes(type)) {
-          throw new Error(`Invalid type: "${type}". Allowed: ${TASK_TYPES.join(", ")}`);
-        }
-        if (!PRIORITIES.includes(priority)) {
-          throw new Error(`Invalid priority: "${priority}". Allowed: ${PRIORITIES.join(", ")}`);
-        }
-        if (opts.interactive) {
-          await newInteractiveCommand(title, { type, domain: opts.domain, priority, goal: opts.goal, cwd, activeDir: p.tasksActive });
-          return;
-        }
-        newCommand(title!, {
-          type,
-          domain: opts.domain,
-          priority,
-          goal: opts.goal,
-          cwd,
-          activeDir: p.tasksActive,
-          implementationNotes: opts.implementationNote,
-        });
-      };
+          const type = opts.type as TaskType;
+          const priority = opts.priority as Priority;
+          if (!TASK_TYPES.includes(type)) {
+            throw new Error(`Invalid type: "${type}". Allowed: ${TASK_TYPES.join(", ")}`);
+          }
+          if (!PRIORITIES.includes(priority)) {
+            throw new Error(`Invalid priority: "${priority}". Allowed: ${PRIORITIES.join(", ")}`);
+          }
+          if (opts.interactive) {
+            await newInteractiveCommand(title, {
+              type,
+              domain: opts.domain,
+              priority,
+              goal: opts.goal,
+              cwd,
+              activeDir: p.tasksActive,
+            });
+            return;
+          }
+          if (!title) {
+            // Unreachable in practice: the guard above throws when a title is
+            // missing in non-interactive mode, and interactive mode returns.
+            throw new Error("error: missing required argument 'title'");
+          }
+          newCommand(title, {
+            type,
+            domain: opts.domain,
+            priority,
+            goal: opts.goal,
+            cwd,
+            activeDir: p.tasksActive,
+            implementationNotes: opts.implementationNote,
+          });
+        };
 
-      if (options.runCliAction) {
-        return options.runCliAction(action);
-      }
-      return action();
-    });
+        if (options.runCliAction) {
+          return options.runCliAction(action);
+        }
+        return action();
+      },
+    );
 
   program
     .command("list")
@@ -278,25 +315,30 @@ export function registerTaskCommands(
     .option("--domain <domain>", "Show only tasks in this exact domain (case-sensitive).")
     .option("--completed", "Show completed tasks. Mutually exclusive with --archived and --all.")
     .option("--archived", "Show archived tasks. Mutually exclusive with --completed and --all.")
-    .option("--all", "Show active, completed, and archived tasks. Mutually exclusive with --completed and --archived.")
+    .option(
+      "--all",
+      "Show active, completed, and archived tasks. Mutually exclusive with --completed and --archived.",
+    )
     .option("--group-by <field>", 'Group tasks by "status", "domain", or "tier".')
-    .action((opts: {
-      status?: string;
-      domain?: string;
-      completed?: boolean;
-      archived?: boolean;
-      all?: boolean;
-      groupBy?: string;
-    }) => {
-      listCommand(p.specsTasks, cwd, {
-        status: opts.status,
-        domain: opts.domain,
-        completed: opts.completed,
-        archived: opts.archived,
-        all: opts.all,
-        groupBy: opts.groupBy as "status" | "domain" | "tier" | undefined,
-      });
-    });
+    .action(
+      (opts: {
+        status?: string;
+        domain?: string;
+        completed?: boolean;
+        archived?: boolean;
+        all?: boolean;
+        groupBy?: string;
+      }) => {
+        listCommand(p.specsTasks, cwd, {
+          status: opts.status,
+          domain: opts.domain,
+          completed: opts.completed,
+          archived: opts.archived,
+          all: opts.all,
+          groupBy: opts.groupBy as "status" | "domain" | "tier" | undefined,
+        });
+      },
+    );
 
   program
     .command("status")
@@ -336,7 +378,9 @@ export function registerTaskCommands(
 
   program
     .command("reopen <task-id>")
-    .description("Reopen a completed or archived task, searching completed first, and move it to tasks/active.")
+    .description(
+      "Reopen a completed or archived task, searching completed first, and move it to tasks/active.",
+    )
     .action((taskId: string) => {
       reopenCommand(taskId, {
         specsTasksDir: p.specsTasks,

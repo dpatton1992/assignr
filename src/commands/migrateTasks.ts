@@ -1,7 +1,7 @@
-import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
-import { basename, join } from "path";
-import { createInterface } from "readline/promises";
-import { stdin as input, stdout as output } from "process";
+import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { stdin as input, stdout as output } from "node:process";
+import { createInterface } from "node:readline/promises";
 import { parse } from "yaml";
 
 export interface MigrateTasksCommandOptions {
@@ -35,7 +35,7 @@ function isTaskYamlFile(fileName: string): boolean {
 }
 
 function relativePath(cwd: string, filePath: string): string {
-  return filePath.startsWith(cwd + "/") ? filePath.slice(cwd.length + 1) : filePath;
+  return filePath.startsWith(`${cwd}/`) ? filePath.slice(cwd.length + 1) : filePath;
 }
 
 function getStatus(filePath: string): string | undefined {
@@ -106,7 +106,9 @@ export async function migrateTasksCommand(options: MigrateTasksCommandOptions): 
 
   console.log("Dry-run preview:");
   for (const item of plan) {
-    console.log(`  ${relativePath(options.cwd, item.source)} -> ${relativePath(options.cwd, item.destination)}`);
+    console.log(
+      `  ${relativePath(options.cwd, item.source)} -> ${relativePath(options.cwd, item.destination)}`,
+    );
   }
 
   const confirmed = await confirmMigration();
@@ -129,7 +131,9 @@ export async function migrateTasksCommand(options: MigrateTasksCommandOptions): 
     } catch (err) {
       if (err && typeof err === "object" && "code" in err && err.code === "EEXIST") {
         skipped += 1;
-        console.warn(`Warning: ${relativePath(options.cwd, item.destination)} already exists; skipping ${item.fileName}.`);
+        console.warn(
+          `Warning: ${relativePath(options.cwd, item.destination)} already exists; skipping ${item.fileName}.`,
+        );
         continue;
       }
 
@@ -138,5 +142,7 @@ export async function migrateTasksCommand(options: MigrateTasksCommandOptions): 
   }
 
   const remaining = readdirSync(options.specsTasksDir).filter(isTaskYamlFile).length;
-  console.log(`Migrated ${migrated} tasks. Skipped ${skipped}. specs/tasks still contains ${remaining} files.`);
+  console.log(
+    `Migrated ${migrated} tasks. Skipped ${skipped}. specs/tasks still contains ${remaining} files.`,
+  );
 }

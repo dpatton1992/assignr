@@ -1,6 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config.js";
 
@@ -27,14 +27,18 @@ describe("worktree configuration", () => {
   });
 
   it("supports an explicit repository opt-out", () => {
-    expect(loadConfig(repoWithConfig("root: .manciple\nworktrees:\n  enabled: false\n")))
-      .toEqual({ root: ".manciple", worktrees: { enabled: false } });
+    expect(loadConfig(repoWithConfig("root: .manciple\nworktrees:\n  enabled: false\n"))).toEqual({
+      root: ".manciple",
+      worktrees: { enabled: false },
+    });
   });
 
   it("rejects a non-boolean worktree policy", () => {
-    expect(() => loadConfig(repoWithConfig("worktrees:\n  enabled: sometimes\n")))
-      .toThrow("worktrees.enabled must be true or false");
-    expect(() => loadConfig(repoWithConfig("worktrees: enabled\n")))
-      .toThrow("worktrees must be a mapping");
+    expect(() => loadConfig(repoWithConfig("worktrees:\n  enabled: sometimes\n"))).toThrow(
+      "worktrees.enabled must be true or false",
+    );
+    expect(() => loadConfig(repoWithConfig("worktrees: enabled\n"))).toThrow(
+      "worktrees must be a mapping",
+    );
   });
 });

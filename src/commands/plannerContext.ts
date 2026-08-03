@@ -1,7 +1,7 @@
-import { existsSync } from "fs";
-import { basename, dirname, join } from "path";
-import { loadTasks } from "../specs/loadTasks.js";
+import { existsSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { LoadedTaskWithTier, LoadTaskTier } from "../specs/loadTasks.js";
+import { loadTasks } from "../specs/loadTasks.js";
 
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 const MAX_GOAL_WIDTH = 140;
@@ -76,9 +76,7 @@ function requiredTaskDirs(specsTasksDir: string, tier: LoadTaskTier): string[] {
   const tasksRoot = resolveTasksRoot(specsTasksDir);
 
   if (tier === "all") {
-    return ["active", "completed", "archived"].map((taskTier) =>
-      join(tasksRoot, taskTier)
-    );
+    return ["active", "completed", "archived"].map((taskTier) => join(tasksRoot, taskTier));
   }
 
   return [join(tasksRoot, tier)];
@@ -161,7 +159,10 @@ function compactTask(task: LoadedTaskWithTier): CompactTask {
   };
 }
 
-function applyFilters(tasks: LoadedTaskWithTier[], options: PlannerContextOptions): LoadedTaskWithTier[] {
+function applyFilters(
+  tasks: LoadedTaskWithTier[],
+  options: PlannerContextOptions,
+): LoadedTaskWithTier[] {
   return tasks
     .filter((task) => (options.status ? task.spec.status === options.status : true))
     .filter((task) => (options.domain ? task.spec.domain === options.domain : true))
@@ -181,13 +182,13 @@ function overlapLines(tasks: CompactTask[]): string[] {
       const first = tasks[i];
       const second = tasks[j];
       const overlaps = first.allowedPaths.filter((firstPath) =>
-        second.allowedPaths.some((secondPath) => pathPatternsMayOverlap(firstPath, secondPath))
+        second.allowedPaths.some((secondPath) => pathPatternsMayOverlap(firstPath, secondPath)),
       );
 
       if (overlaps.length === 0) continue;
 
       lines.push(
-        `- ${first.id} <-> ${second.id} paths:${summarizePaths(overlaps)} | ${second.allowedPathSummary}`
+        `- ${first.id} <-> ${second.id} paths:${summarizePaths(overlaps)} | ${second.allowedPathSummary}`,
       );
     }
   }
@@ -208,7 +209,7 @@ function budgetChars(options: PlannerContextOptions): number | undefined {
 function appendWithinBudget(
   lines: string[],
   nextLine: string,
-  maxChars: number | undefined
+  maxChars: number | undefined,
 ): boolean {
   if (maxChars === undefined) {
     lines.push(nextLine);
@@ -226,7 +227,7 @@ function appendWithinBudget(
 
 export function buildPlannerContext(
   specsTasksDir: string,
-  options: PlannerContextOptions = {}
+  options: PlannerContextOptions = {},
 ): PlannerContextResult {
   const tier = resolveTier(options);
   const { tasks, errors } = loadTasks(specsTasksDir, tier);
@@ -268,9 +269,7 @@ export function buildPlannerContext(
 
   const omittedCount = Math.max(0, filteredTasks.length - taskLinesEmitted);
   if (truncated) {
-    warnings.push(
-      `Planner context truncated to fit ${maxChars} chars; read full specs as needed.`
-    );
+    warnings.push(`Planner context truncated to fit ${maxChars} chars; read full specs as needed.`);
   }
   if (omittedCount > 0) {
     warnings.push(`${omittedCount} task or overlap line(s) omitted by the context budget.`);
@@ -308,7 +307,7 @@ function positiveIntegerOption(value: number | undefined, name: string): void {
 export function plannerContextCommand(
   specsTasksDir: string,
   _cwd: string,
-  options: PlannerContextOptions = {}
+  options: PlannerContextOptions = {},
 ): void {
   try {
     positiveIntegerOption(options.maxChars, "--max-chars");

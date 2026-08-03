@@ -1,8 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { packageVersion } from "./version.js";
 import { registerHandoffTools } from "./mcp/handoffTools.js";
+import { packageVersion } from "./version.js";
+
 export { compileTaskForMcp } from "./mcp/handoffTools.js";
+
 import { registerOverviewTools } from "./mcp/overviewTools.js";
 import { registerReviewTools } from "./mcp/reviewTools.js";
 import { registerRunLogTools } from "./mcp/runLogTools.js";

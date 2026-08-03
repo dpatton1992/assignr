@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { renderRunCostSummary, summarizeRunCost } from "../src/commands/summarizeRunCost.js";
 
@@ -44,9 +44,15 @@ afterEach(() => {
 
 describe("summarizeRunCost", () => {
   it("reports unknown token and cost coverage when no evidence exists", () => {
-    writeRunLog("2026-05-25-12-00-00-alpha.md", runLog("alpha", `
+    writeRunLog(
+      "2026-05-25-12-00-00-alpha.md",
+      runLog(
+        "alpha",
+        `
 - Agent/Harness (provided by user): Codex
-- Model (provided by user): gpt-5-codex`));
+- Model (provided by user): gpt-5-codex`,
+      ),
+    );
 
     const summary = summarizeRunCost(runsDir);
     const rendered = renderRunCostSummary(summary);
@@ -62,7 +68,11 @@ describe("summarizeRunCost", () => {
   });
 
   it("summarizes mixed model, token, cost, command, and test evidence", () => {
-    writeRunLog("2026-05-25-12-00-00-alpha.md", runLog("alpha", `
+    writeRunLog(
+      "2026-05-25-12-00-00-alpha.md",
+      runLog(
+        "alpha",
+        `
 - Agent/Harness (provided by user): Codex
 - Model (provided by user): gpt-5-codex
 
@@ -74,15 +84,23 @@ describe("summarizeRunCost", () => {
 
 ## Cost Evidence
 
-- Cost USD: 0.01`));
-    writeRunLog("2026-05-25-12-05-00-beta.md", runLog("beta", `
+- Cost USD: 0.01`,
+      ),
+    );
+    writeRunLog(
+      "2026-05-25-12-05-00-beta.md",
+      runLog(
+        "beta",
+        `
 - Agent/Harness (provided by user): Claude Code
 - Model (provided by user): claude-sonnet-4-5
 
 ## Usage Evidence
 
 - Input tokens: 200
-- Output tokens: 25`));
+- Output tokens: 25`,
+      ),
+    );
 
     const summary = summarizeRunCost(runsDir);
     const rendered = renderRunCostSummary(summary);
@@ -101,18 +119,30 @@ describe("summarizeRunCost", () => {
   });
 
   it("filters to one task id", () => {
-    writeRunLog("2026-05-25-12-00-00-alpha.md", runLog("alpha", `
+    writeRunLog(
+      "2026-05-25-12-00-00-alpha.md",
+      runLog(
+        "alpha",
+        `
 - Model (provided by user): gpt-5-codex
 
 ## Usage Evidence
 
-- Total tokens: 150`));
-    writeRunLog("2026-05-25-12-05-00-beta.md", runLog("beta", `
+- Total tokens: 150`,
+      ),
+    );
+    writeRunLog(
+      "2026-05-25-12-05-00-beta.md",
+      runLog(
+        "beta",
+        `
 - Model (provided by user): claude-sonnet-4-5
 
 ## Usage Evidence
 
-- Total tokens: 300`));
+- Total tokens: 300`,
+      ),
+    );
 
     const summary = summarizeRunCost(runsDir, "beta");
     const rendered = renderRunCostSummary(summary, "beta");
@@ -126,7 +156,9 @@ describe("summarizeRunCost", () => {
   });
 
   it("keeps backward compatibility with existing run logs", () => {
-    writeRunLog("2026-05-25-12-00-00-legacy-task.md", `# Run Log: Legacy task
+    writeRunLog(
+      "2026-05-25-12-00-00-legacy-task.md",
+      `# Run Log: Legacy task
 
 ## Metadata
 
@@ -138,7 +170,8 @@ describe("summarizeRunCost", () => {
 ## Commands Run
 
 - pnpm test
-`);
+`,
+    );
 
     const summary = summarizeRunCost(runsDir);
 

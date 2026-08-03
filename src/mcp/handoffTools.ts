@@ -1,19 +1,19 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { join, relative } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { parse } from "yaml";
 import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { formatTaskById } from "../commands/formatTask.js";
 import { buildTaskPacket } from "../commands/taskPacket.js";
 import { loadTasks, pathOwnershipWarningsForTask } from "../specs/loadTasks.js";
+import type { TaskSpec } from "../specs/schema.js";
 import {
   IMPLEMENTATION_TEMPLATE,
   REVIEW_TEMPLATE,
-  TEST_TEMPLATE,
   renderDomainContext,
   renderTemplate,
+  TEST_TEMPLATE,
 } from "../templates/renderTemplate.js";
-import type { TaskSpec } from "../specs/schema.js";
 import { getRepoContext, repoInputSchema } from "./context.js";
 import { errorResult, jsonResult, toolResult } from "./results.js";
 
@@ -31,7 +31,7 @@ function getTemplate(type: TaskSpec["type"]): string {
 function loadDomainContextForPaths(
   domain: string,
   specsDomainsDir: string,
-  cwdForRelativePaths: string
+  cwdForRelativePaths: string,
 ): { content?: string; warning?: string } {
   const domainPath = join(specsDomainsDir, `${domain}.yaml`);
 
@@ -124,7 +124,7 @@ export function registerHandoffTools(server: McpServer): void {
           if (message === `Task not found: ${task_id}`) return errorResult(message);
           throw err;
         }
-      })
+      }),
   );
 
   server.registerTool(
@@ -147,7 +147,7 @@ export function registerHandoffTools(server: McpServer): void {
               specsTasksDir: ctx.paths.specsTasks,
               cwd: ctx.cwd,
               checkOnly: check_only ?? false,
-            })
+            }),
           );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -158,7 +158,7 @@ export function registerHandoffTools(server: McpServer): void {
             errors: [message],
           });
         }
-      })
+      }),
   );
 
   server.registerTool(
@@ -180,14 +180,14 @@ export function registerHandoffTools(server: McpServer): void {
               taskId: task_id,
               specsTasksDir: ctx.paths.specsTasks,
               cwd: ctx.cwd,
-            })
+            }),
           );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           if (message === `Task not found: ${task_id}`) return errorResult(message);
           throw err;
         }
-      })
+      }),
   );
 
   server.registerTool(
@@ -209,6 +209,6 @@ export function registerHandoffTools(server: McpServer): void {
         }
 
         return jsonResult({ content: readFileSync(promptPath, "utf-8") });
-      })
+      }),
   );
 }

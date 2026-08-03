@@ -1,23 +1,15 @@
-import { describe, it, expect, afterEach } from "vitest";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
-
+import { completeCommand } from "../src/commands/complete.js";
 import { initCommand } from "../src/commands/init.js";
 import { newCommand } from "../src/commands/new.js";
-import { setStatusCommand } from "../src/commands/setStatus.js";
 import { runLogCommand } from "../src/commands/runLog.js";
-import { completeCommand } from "../src/commands/complete.js";
+import { setStatusCommand } from "../src/commands/setStatus.js";
 import { getPaths } from "../src/utils/paths.js";
 
 const tempDirs: string[] = [];
@@ -90,7 +82,7 @@ function createCompletedTask(p: ReturnType<typeof getPaths>, cwd: string, id: st
 }
 
 function readTaskStatus(filePath: string): unknown {
-  return (parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>)["status"];
+  return (parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>).status;
 }
 
 async function connectServer(cwd: string): Promise<Client> {
@@ -98,7 +90,7 @@ async function connectServer(cwd: string): Promise<Client> {
     process.cwd(),
     "node_modules",
     ".bin",
-    process.platform === "win32" ? "tsx.cmd" : "tsx"
+    process.platform === "win32" ? "tsx.cmd" : "tsx",
   );
   const transport = new StdioClientTransport({
     command: tsxBin,
@@ -110,11 +102,9 @@ async function connectServer(cwd: string): Promise<Client> {
   return client;
 }
 
-function textOf(result: {
-  content: Array<{ type: string; text?: string }>;
-  isError?: boolean;
-}): string {
-  const text = result.content.find((part) => part.type === "text")?.text;
+function textOf(result: unknown): string {
+  const content = (result as { content?: Array<{ type: string; text?: string }> }).content;
+  const text = content?.find((part) => part.type === "text")?.text;
   expect(text).toBeDefined();
   return text ?? "";
 }
@@ -422,10 +412,12 @@ describe("MCP review tools repo scoping", () => {
     await client.close();
 
     expect(
-      JSON.parse(textOf(defaultQueue)).needsReview.rows.map((row: { taskId: string }) => row.taskId)
+      JSON.parse(textOf(defaultQueue)).needsReview.rows.map(
+        (row: { taskId: string }) => row.taskId,
+      ),
     ).toEqual(["server-task"]);
     expect(
-      JSON.parse(textOf(scopedQueue)).needsReview.rows.map((row: { taskId: string }) => row.taskId)
+      JSON.parse(textOf(scopedQueue)).needsReview.rows.map((row: { taskId: string }) => row.taskId),
     ).toEqual(["target-task"]);
     expect(JSON.parse(textOf(scopedPacket)).taskId).toBe("target-task");
     expect(defaultPacketMissing.isError).toBe(true);
@@ -448,7 +440,10 @@ describe("MCP review tools repo scoping", () => {
     await client.close();
 
     expect(result.isError).toBeFalsy();
-    expect(JSON.parse(textOf(result))).toMatchObject({ taskId: "target-task", outcome: "approved" });
+    expect(JSON.parse(textOf(result))).toMatchObject({
+      taskId: "target-task",
+      outcome: "approved",
+    });
     expect(existsSync(join(target.p.tasksCompleted, "target-task.yaml"))).toBe(true);
     // Server repo task is untouched.
     expect(readTaskStatus(join(server.p.tasksActive, "server-task.yaml"))).toBe("needs_review");

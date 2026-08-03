@@ -1,37 +1,20 @@
-import {
-  writeFileSync,
-  mkdirSync,
-  existsSync,
-} from "fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Command } from "commander";
-import { spawnSync } from "child_process";
-import { join } from "path";
+import { readLatestRunLogContent } from "../review/evidence.js";
+import type { ReviewPacketContext } from "../review/reviewPacket.js";
+import { getReviewQueue, getTaskReviewPacket, ReviewPacketError } from "../review/reviewPacket.js";
 import { loadTasks } from "../specs/loadTasks.js";
-import {
-  implementationPromptFilename,
-  reviewPromptFilename,
-} from "../templates/renderTemplate.js";
 import type { TaskSpec } from "../specs/schema.js";
-import {
-  readLatestRunLogContent,
-} from "../review/evidence.js";
-import {
-  headerBanner,
-  colorForStatus,
-  statusSymbol,
-} from "../utils/styling.js";
+import { implementationPromptFilename, reviewPromptFilename } from "../templates/renderTemplate.js";
 import type { ManciplePaths } from "../utils/paths.js";
+import { colorForStatus, headerBanner, statusSymbol } from "../utils/styling.js";
+import { approveCommand } from "./approve.js";
+import { blockReviewCommand } from "./blockReview.js";
+import { requestChangesCommand } from "./requestChanges.js";
 import { reviewCheckCommand } from "./reviewCheck.js";
 import { reviewQueueCommand } from "./reviewQueue.js";
-import { approveCommand } from "./approve.js";
-import { requestChangesCommand } from "./requestChanges.js";
-import { blockReviewCommand } from "./blockReview.js";
-import {
-  getReviewQueue,
-  getTaskReviewPacket,
-  ReviewPacketError,
-} from "../review/reviewPacket.js";
-import type { ReviewPacketContext } from "../review/reviewPacket.js";
 
 /**
  * Machine-readable review adapters are thin layers over the assembled
@@ -114,8 +97,7 @@ function compactRunLogSummary(cwd: string, taskId: string): string {
   if (filesMatch) {
     const count = filesMatch[1]
       .split("\n")
-      .filter((l) => l.trim().startsWith("- ") && !l.includes("_Source:"))
-      .length;
+      .filter((l) => l.trim().startsWith("- ") && !l.includes("_Source:")).length;
     if (count > 0) parts.push(`${count} file(s) changed`);
   }
 
@@ -149,7 +131,7 @@ export interface RenderReviewPromptOptions {
 export function renderReviewPrompt(
   spec: TaskSpec,
   cwd: string,
-  options: RenderReviewPromptOptions = {}
+  options: RenderReviewPromptOptions = {},
 ): string {
   const includeRunLog = options.includeRunLog ?? false;
   const includeGitDiff = options.includeGitDiff ?? false;
@@ -235,7 +217,7 @@ export function createReviewPrompt(
   specsTasksDir: string,
   generatedDir: string,
   cwd: string,
-  options?: RenderReviewPromptOptions
+  options?: RenderReviewPromptOptions,
 ): string {
   const { tasks, errors } = loadTasks(specsTasksDir, "all");
 
@@ -246,9 +228,7 @@ export function createReviewPrompt(
   const found = tasks.find((t) => t.spec.id === taskId);
 
   if (!found) {
-    console.error(
-      `Task not found: ${taskId}\nRun "manciple status" to see available tasks.`
-    );
+    console.error(`Task not found: ${taskId}\nRun "manciple status" to see available tasks.`);
     process.exit(1);
   }
 
@@ -268,10 +248,10 @@ export function reviewCommand(
   specsTasksDir: string,
   generatedDir: string,
   cwd: string,
-  options?: RenderReviewPromptOptions
+  options?: RenderReviewPromptOptions,
 ): void {
   const outPath = createReviewPrompt(taskId, specsTasksDir, generatedDir, cwd, options);
-  const relPath = outPath.replace(cwd + "/", "");
+  const relPath = outPath.replace(`${cwd}/`, "");
 
   const { tasks } = loadTasks(specsTasksDir, "all");
   const found = tasks.find((t) => t.spec.id === taskId);
@@ -281,7 +261,7 @@ export function reviewCommand(
   if (found) {
     const sym = statusSymbol(found.spec.status);
     console.log(`  Task:   ${found.spec.id}`);
-    console.log(`  Status: ${colorForStatus(found.spec.status)(sym + " " + found.spec.status)}`);
+    console.log(`  Status: ${colorForStatus(found.spec.status)(`${sym} ${found.spec.status}`)}`);
   } else {
     console.log(`  Task:   ${taskId}`);
   }
@@ -289,8 +269,8 @@ export function reviewCommand(
   console.log(
     `  Note: Review prompts are separate from compiled implementation prompts, which use ${join(
       generatedDir,
-      implementationPromptFilename(taskId)
-    ).replace(cwd + "/", "")}.`
+      implementationPromptFilename(taskId),
+    ).replace(`${cwd}/`, "")}.`,
   );
 }
 
@@ -301,15 +281,15 @@ export function reviewCommand(
  */
 export interface BareReviewDispatch {
   isTty: boolean;
-  launchTui: (p: ManciplePaths, cwd: string) => void | Promise<void>;
+  launchTui: (p: ManciplePaths, cwd: string) => unknown;
   showHelp: () => void;
 }
 
 export function dispatchBareReview(
   dispatch: BareReviewDispatch,
   p: ManciplePaths,
-  cwd: string
-): void | Promise<void> {
+  cwd: string,
+): unknown {
   if (dispatch.isTty) {
     return dispatch.launchTui(p, cwd);
   }
@@ -330,7 +310,7 @@ export function registerReviewCommands(
   program: Command,
   p: ManciplePaths,
   cwd: string,
-  options: ReviewCommandRegistrationOptions = {}
+  options: ReviewCommandRegistrationOptions = {},
 ): void {
   const isTty = options.isTty ?? (() => process.stdout.isTTY);
   const launchTui =
@@ -343,65 +323,84 @@ export function registerReviewCommands(
 
   const review = program
     .command("review [task-id]")
-    .description("Open the interactive review dashboard, or manage the review process. See `manciple review --help` for subcommands.")
+    .description(
+      "Open the interactive review dashboard, or manage the review process. See `manciple review --help` for subcommands.",
+    )
     .option("--include-run-log", "Include full latest run log content.", false)
     .option("--include-diff", "Include full git diff content.", false)
-    .action((taskId: string | undefined, opts: { includeRunLog: boolean; includeDiff: boolean }) => {
-      if (taskId) {
-        reviewCommand(taskId, p.specsTasks, p.promptsGenerated, cwd, {
-          includeRunLog: opts.includeRunLog,
-          includeGitDiff: opts.includeDiff,
+    .action(
+      (taskId: string | undefined, opts: { includeRunLog: boolean; includeDiff: boolean }) => {
+        if (taskId) {
+          reviewCommand(taskId, p.specsTasks, p.promptsGenerated, cwd, {
+            includeRunLog: opts.includeRunLog,
+            includeGitDiff: opts.includeDiff,
+          });
+          return;
+        }
+        // Bare `manciple review` opens the interactive dashboard in a TTY and
+        // prints help (without hanging) when stdout is not a terminal.
+        void Promise.resolve(
+          dispatchBareReview(
+            {
+              isTty: isTty(),
+              launchTui,
+              showHelp,
+            },
+            p,
+            cwd,
+          ),
+        ).catch((error: unknown) => {
+          console.error(error instanceof Error ? error.message : String(error));
+          process.exit(1);
         });
-        return;
-      }
-      // Bare `manciple review` opens the interactive dashboard in a TTY and
-      // prints help (without hanging) when stdout is not a terminal.
-      void Promise.resolve(
-        dispatchBareReview(
-          {
-            isTty: isTty(),
-            launchTui,
-            showHelp,
-          },
-          p,
-          cwd
-        )
-      ).catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
-        process.exit(1);
-      });
-    });
+      },
+    );
 
   review
     .command("queue")
-    .description("Run review queue triage (same as `manciple review-queue`). Use --json for the assembled queue as stable JSON.")
+    .description(
+      "Run review queue triage (same as `manciple review-queue`). Use --json for the assembled queue as stable JSON.",
+    )
     .option("--mode <mode>", "Review queue mode: triage or deep.")
     .option("--all", "In deep mode, include tasks that passed triage.", false)
     .option("--budget <tokens>", "Positive integer review budget estimate for queued packets.")
     .option("--deep-only <filter>", "In deep mode, emit only tasks matching the filter: risky.")
     .option("--machine", "Tab-delimited output for backward compatibility.", false)
-    .option("--json", "Print the assembled review queue as stable JSON with no ANSI styling.", false)
-    .action((opts: { mode: string; all: boolean; budget?: string; deepOnly?: string; machine: boolean; json: boolean }) => {
-      if (opts.json) {
-        if (opts.mode !== undefined && opts.mode !== "triage" && opts.mode !== "deep") {
-          console.error(`Unsupported review queue mode: ${opts.mode}. Allowed: triage, deep.`);
-          process.exit(1);
+    .option(
+      "--json",
+      "Print the assembled review queue as stable JSON with no ANSI styling.",
+      false,
+    )
+    .action(
+      (opts: {
+        mode: string;
+        all: boolean;
+        budget?: string;
+        deepOnly?: string;
+        machine: boolean;
+        json: boolean;
+      }) => {
+        if (opts.json) {
+          if (opts.mode !== undefined && opts.mode !== "triage" && opts.mode !== "deep") {
+            console.error(`Unsupported review queue mode: ${opts.mode}. Allowed: triage, deep.`);
+            process.exit(1);
+          }
+          printJson(getReviewQueue(reviewPacketContext(p, cwd)));
+          return;
         }
-        printJson(getReviewQueue(reviewPacketContext(p, cwd)));
-        return;
-      }
-      reviewQueueCommand(p.tasksActive, cwd, {
-        mode: opts.mode as "triage" | "deep",
-        all: opts.all,
-        budget: opts.budget,
-        deepOnly: opts.deepOnly,
-        machine: opts.machine,
-        generatedDir: p.promptsGenerated,
-        activeDir: p.tasksActive,
-        completedDir: p.tasksCompleted,
-        archivedDir: p.tasksArchived,
-      });
-    });
+        reviewQueueCommand(p.tasksActive, cwd, {
+          mode: opts.mode as "triage" | "deep",
+          all: opts.all,
+          budget: opts.budget,
+          deepOnly: opts.deepOnly,
+          machine: opts.machine,
+          generatedDir: p.promptsGenerated,
+          activeDir: p.tasksActive,
+          completedDir: p.tasksCompleted,
+          archivedDir: p.tasksArchived,
+        });
+      },
+    );
 
   review
     .command("check [task-id]")
@@ -433,8 +432,14 @@ export function registerReviewCommands(
 
   review
     .command("packet <task-id>")
-    .description("Assemble the ReviewPacket for one task. Use --json for stable machine-readable output.")
-    .option("--json", "Print the assembled ReviewPacket as stable JSON with no ANSI styling.", false)
+    .description(
+      "Assemble the ReviewPacket for one task. Use --json for stable machine-readable output.",
+    )
+    .option(
+      "--json",
+      "Print the assembled ReviewPacket as stable JSON with no ANSI styling.",
+      false,
+    )
     .action((taskId: string, opts: { json: boolean }) => {
       let packet: ReturnType<typeof getTaskReviewPacket>;
       try {
@@ -454,8 +459,12 @@ export function registerReviewCommands(
 
       console.log(`Review packet: ${packet.taskId} (${packet.status})`);
       console.log(`  Title:     ${packet.title}`);
-      console.log(`  Readiness: ${packet.readiness.ready ? "ready" : "not ready"} (score ${packet.readiness.score}/100)`);
-      console.log(`  Decisions: ${packet.availableDecisions.map((decision) => decision.id).join(", ") || "none"}`);
+      console.log(
+        `  Readiness: ${packet.readiness.ready ? "ready" : "not ready"} (score ${packet.readiness.score}/100)`,
+      );
+      console.log(
+        `  Decisions: ${packet.availableDecisions.map((decision) => decision.id).join(", ") || "none"}`,
+      );
       console.log(`  Blockers:  ${packet.blockers.length}`);
       console.log(`  Use --json for the full machine-readable packet.`);
     });
@@ -474,7 +483,9 @@ export function registerReviewCommands(
 
   review
     .command("changes <task-id>")
-    .description("Request changes and return task to in_progress (same as `manciple request-changes`).")
+    .description(
+      "Request changes and return task to in_progress (same as `manciple request-changes`).",
+    )
     .requiredOption("--reason <text>", "Reason changes are required.")
     .action((taskId: string, opts: { reason: string }) => {
       requestChangesCommand(taskId, opts.reason, {
@@ -520,23 +531,33 @@ export function registerReviewCommands(
     .option("--budget <tokens>", "Positive integer review budget estimate for queued packets.")
     .option("--deep-only <filter>", "In deep mode, emit only tasks matching the filter: risky.")
     .option("--machine", "Tab-delimited output for backward compatibility.", false)
-    .action((opts: { mode: string; all: boolean; budget?: string; deepOnly?: string; machine: boolean }) => {
-      reviewQueueCommand(p.tasksActive, cwd, {
-        mode: opts.mode as "triage" | "deep",
-        all: opts.all,
-        budget: opts.budget,
-        deepOnly: opts.deepOnly,
-        machine: opts.machine,
-        generatedDir: p.promptsGenerated,
-        activeDir: p.tasksActive,
-        completedDir: p.tasksCompleted,
-        archivedDir: p.tasksArchived,
-      });
-    });
+    .action(
+      (opts: {
+        mode: string;
+        all: boolean;
+        budget?: string;
+        deepOnly?: string;
+        machine: boolean;
+      }) => {
+        reviewQueueCommand(p.tasksActive, cwd, {
+          mode: opts.mode as "triage" | "deep",
+          all: opts.all,
+          budget: opts.budget,
+          deepOnly: opts.deepOnly,
+          machine: opts.machine,
+          generatedDir: p.promptsGenerated,
+          activeDir: p.tasksActive,
+          completedDir: p.tasksCompleted,
+          archivedDir: p.tasksArchived,
+        });
+      },
+    );
 
   program
     .command("approve <task-id>")
-    .description("Approve a task in needs_review, record the outcome, and move it to tasks/completed.")
+    .description(
+      "Approve a task in needs_review, record the outcome, and move it to tasks/completed.",
+    )
     .action((taskId: string) => {
       approveCommand(taskId, {
         specsTasksDir: p.specsTasks,

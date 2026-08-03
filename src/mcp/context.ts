@@ -1,4 +1,4 @@
-import { resolve } from "path";
+import { resolve } from "node:path";
 import { z } from "zod";
 import { loadConfig } from "../config.js";
 import { getPaths } from "../utils/paths.js";
@@ -14,7 +14,7 @@ export const repoInputSchema = {
     .string()
     .optional()
     .describe(
-      "Absolute or relative repository root to scope this Manciple operation. Defaults to the MCP server process cwd for backward compatibility."
+      "Absolute or relative repository root to scope this Manciple operation. Defaults to the MCP server process cwd for backward compatibility.",
     ),
 };
 

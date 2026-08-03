@@ -1,8 +1,8 @@
-import { loadTasks } from "../specs/loadTasks.js";
-import { STATUSES } from "../constants.js";
 import type { Status } from "../constants.js";
+import { STATUSES } from "../constants.js";
 import type { LoadedTaskWithTier } from "../specs/loadTasks.js";
-import { colorForStatus, statusSymbol, priorityBadge, headerBanner } from "../utils/styling.js";
+import { loadTasks } from "../specs/loadTasks.js";
+import { colorForStatus, headerBanner, priorityBadge, statusSymbol } from "../utils/styling.js";
 
 function pad(str: string, width: number): string {
   return str.padEnd(width);
@@ -13,7 +13,7 @@ function findNextTask(tasks: LoadedTaskWithTier[]): {
   reason: string;
 } {
   const completedIds = new Set(
-    tasks.filter((t) => t.spec.status === "complete").map((t) => t.spec.id)
+    tasks.filter((t) => t.spec.status === "complete").map((t) => t.spec.id),
   );
 
   const priorities: Record<string, number> = {
@@ -28,7 +28,7 @@ function findNextTask(tasks: LoadedTaskWithTier[]): {
     .sort(
       (a, b) =>
         (priorities[b.spec.priority ?? "medium"] ?? 2) -
-        (priorities[a.spec.priority ?? "medium"] ?? 2)
+        (priorities[a.spec.priority ?? "medium"] ?? 2),
     );
 
   for (const candidate of pending) {
@@ -41,9 +41,7 @@ function findNextTask(tasks: LoadedTaskWithTier[]): {
 
   if (pending.length > 0) {
     const first = pending[0];
-    const blockedDeps = (first.spec.depends_on ?? []).filter(
-      (d) => !completedIds.has(d)
-    );
+    const blockedDeps = (first.spec.depends_on ?? []).filter((d) => !completedIds.has(d));
     return {
       task: first,
       reason: `Blocked by unresolved dependencies: ${blockedDeps.join(", ")}`,
@@ -53,12 +51,12 @@ function findNextTask(tasks: LoadedTaskWithTier[]): {
   return { task: null, reason: "No pending tasks." };
 }
 
-export function statusCommand(specsTasksDir: string, cwd: string): void {
+export function statusCommand(specsTasksDir: string, _cwd: string): void {
   const { tasks, errors } = loadTasks(specsTasksDir, "all");
 
   if (errors.length > 0) {
     console.warn(
-      `  ⚠ ${errors.length} task file(s) could not be loaded (run "manciple validate" for details).`
+      `  ⚠ ${errors.length} task file(s) could not be loaded (run "manciple validate" for details).`,
     );
   }
 
@@ -84,7 +82,7 @@ export function statusCommand(specsTasksDir: string, cwd: string): void {
   console.log("Active tasks:");
   for (const status of STATUSES) {
     if (status === "complete" && counts[status] === 0) continue;
-    const coloredLabel = colorForStatus(status)(pad(status + ":", 14));
+    const coloredLabel = colorForStatus(status)(pad(`${status}:`, 14));
     console.log(`  ${statusSymbol(status)} ${coloredLabel} ${counts[status]}`);
   }
   console.log(`\nCompleted lifecycle tasks: ${completedLifecycleCount}`);

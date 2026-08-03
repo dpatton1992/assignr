@@ -1,11 +1,8 @@
 import { z } from "zod";
-import { STATUSES, TASK_TYPES, PRIORITIES } from "../constants.js";
+import { PRIORITIES, STATUSES, TASK_TYPES } from "../constants.js";
 
 export const TaskSpecSchema = z.object({
-  id: z
-    .string()
-    .min(1, "id is required")
-    .regex(/^\S+$/, "id must not contain spaces"),
+  id: z.string().min(1, "id is required").regex(/^\S+$/, "id must not contain spaces"),
   title: z.string().min(1, "title is required"),
   status: z.enum(STATUSES),
   type: z.enum(TASK_TYPES),
@@ -30,14 +27,10 @@ export const TaskSpecSchema = z.object({
       unsafe_parallel_areas: [],
     }),
   goal: z.string().min(1, "goal is required"),
-  acceptance_criteria: z
-    .array(z.string())
-    .min(1, "acceptance_criteria must not be empty"),
+  acceptance_criteria: z.array(z.string()).min(1, "acceptance_criteria must not be empty"),
   implementation_notes: z.array(z.string()).optional().default([]),
   verification: z.object({
-    commands: z
-      .array(z.string())
-      .min(1, "verification.commands must not be empty"),
+    commands: z.array(z.string()).min(1, "verification.commands must not be empty"),
   }),
   outputs_required: z.array(z.string()).optional().default([]),
   notes: z.array(z.string()).optional().default([]),

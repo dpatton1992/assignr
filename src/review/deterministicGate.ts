@@ -1,18 +1,14 @@
-import { existsSync, readdirSync } from "fs";
-import { basename, dirname, join, relative } from "path";
-import { loadTasks, pathOwnershipWarningsForTask } from "../specs/loadTasks.js";
-import type { LoadedTaskWithTier } from "../specs/loadTasks.js";
-import { checkLifecyclePlacement } from "../lifecycle/placement.js";
+import { existsSync, readdirSync } from "node:fs";
+import { basename, dirname, join, relative } from "node:path";
 import type { LifecyclePlacementIssue } from "../lifecycle/placement.js";
-import {
-  parseRunLogEvidence,
-  readGitChangedFiles,
-  readLatestRunLogContent,
-} from "./evidence.js";
-import { evaluateReviewReadiness } from "./readiness.js";
-import type { ReviewReadinessReport } from "./readiness.js";
+import { checkLifecyclePlacement } from "../lifecycle/placement.js";
+import type { LoadedTaskWithTier } from "../specs/loadTasks.js";
+import { loadTasks, pathOwnershipWarningsForTask } from "../specs/loadTasks.js";
 import { normalizePath, pathMatchesPattern } from "../utils/pathUtils.js";
 import { getManagedWorktree, isGitRepository } from "../worktrees/manager.js";
+import { parseRunLogEvidence, readGitChangedFiles, readLatestRunLogContent } from "./evidence.js";
+import type { ReviewReadinessReport } from "./readiness.js";
+import { evaluateReviewReadiness } from "./readiness.js";
 
 export type DeterministicReviewBlockerKind =
   | "load-error"
@@ -84,10 +80,14 @@ function mancipleRootFrom(tasksDir: string): string {
   return dirname(tasksDir);
 }
 
-function defaultDirs(specsTasksDir: string): Required<Pick<
-  DeterministicReviewGateOptions,
-  "generatedDir" | "activeDir" | "completedDir" | "archivedDir"
->> {
+function defaultDirs(
+  specsTasksDir: string,
+): Required<
+  Pick<
+    DeterministicReviewGateOptions,
+    "generatedDir" | "activeDir" | "completedDir" | "archivedDir"
+  >
+> {
   const root = mancipleRootFrom(specsTasksDir);
   return {
     generatedDir: join(root, "prompts", "generated"),
@@ -133,13 +133,13 @@ function hasReviewOutcomeLog(runsDir: string, taskId: string): boolean {
 
 function dependencyIsBlocked(depId: string, tasks: LoadedTaskWithTier[]): boolean {
   const dep = tasks.find((task) => task.spec.id === depId);
-  return !dep || dep.spec.status !== "complete";
+  return dep?.spec.status !== "complete";
 }
 
 function addPathPolicyBlockers(
   task: LoadedTaskWithTier,
   files: readonly string[],
-  blockers: DeterministicReviewBlocker[]
+  blockers: DeterministicReviewBlocker[],
 ): void {
   const changedFiles = unique([...files]);
   const allowed = task.spec.allowed_paths ?? [];
@@ -166,7 +166,7 @@ function addPathPolicyBlockers(
 }
 
 export function evaluateDeterministicReviewGate(
-  options: DeterministicReviewGateOptions
+  options: DeterministicReviewGateOptions,
 ): DeterministicReviewGateReport {
   const defaults = defaultDirs(options.specsTasksDir);
   const dirs = {
@@ -196,11 +196,11 @@ export function evaluateDeterministicReviewGate(
     reason: `${issue.file}: ${issue.message}`,
   }));
   loadBlockers.push(...lifecycleBlockers);
-  const targets = tasks.filter((task) => (
+  const targets = tasks.filter((task) =>
     options.taskId
       ? task.spec.id === options.taskId
-      : task.tier === "active" && task.spec.status === "needs_review"
-  ));
+      : task.tier === "active" && task.spec.status === "needs_review",
+  );
 
   const taskReports = targets.map((task) => {
     let evidenceCwd = options.cwd;
@@ -270,7 +270,10 @@ export function evaluateDeterministicReviewGate(
         reason: `No generated implementation prompt found for ${task.spec.id}.`,
       });
     }
-    if (!hasReviewPrompt(dirs.generatedDir, task.spec.id) && !hasReviewOutcomeLog(runsDir, task.spec.id)) {
+    if (
+      !hasReviewPrompt(dirs.generatedDir, task.spec.id) &&
+      !hasReviewOutcomeLog(runsDir, task.spec.id)
+    ) {
       blockers.push({
         taskId: task.spec.id,
         kind: "missing-review-log",
@@ -289,11 +292,8 @@ export function evaluateDeterministicReviewGate(
 
     addPathPolicyBlockers(
       task,
-      [
-        ...filesFromRunLog(runLogContent),
-        ...changedFilesFor(readiness, gitChangedFiles),
-      ],
-      blockers
+      [...filesFromRunLog(runLogContent), ...changedFilesFor(readiness, gitChangedFiles)],
+      blockers,
     );
 
     const advisories = pathOwnershipWarningsForTask(task, tasks).map((warning) => ({

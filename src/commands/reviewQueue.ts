@@ -1,18 +1,13 @@
+import { basename, dirname, join } from "node:path";
 import picocolors from "picocolors";
-import { basename, dirname, join } from "path";
-import { evaluateDeterministicReviewGate } from "../review/deterministicGate.js";
 import type {
   DeterministicReviewBlocker,
   DeterministicReviewBlockerKind,
   DeterministicReviewTaskReport,
 } from "../review/deterministicGate.js";
+import { evaluateDeterministicReviewGate } from "../review/deterministicGate.js";
+import { headerBanner, styleCell } from "../utils/styling.js";
 import { createReviewPrompt } from "./review.js";
-import {
-  headerBanner,
-  colorForStatus,
-  statusSymbol,
-  styleCell,
-} from "../utils/styling.js";
 
 export type ReviewQueueMode = "triage" | "deep";
 export type ReviewQueueDeepOnly = "risky";
@@ -38,14 +33,16 @@ const BLOCKED_KINDS = new Set<DeterministicReviewBlockerKind>([
   "active-wrong-directory",
 ]);
 
-function decisionFor(blockers: readonly DeterministicReviewBlocker[]): "pass" | "escalate" | "blocked" {
+function decisionFor(
+  blockers: readonly DeterministicReviewBlocker[],
+): "pass" | "escalate" | "blocked" {
   if (blockers.length === 0) return "pass";
   return blockers.some((blocker) => BLOCKED_KINDS.has(blocker.kind)) ? "blocked" : "escalate";
 }
 
 function truncateId(id: string): string {
   if (id.length <= 45) return id;
-  return id.slice(0, 45) + "…";
+  return `${id.slice(0, 45)}…`;
 }
 
 function colorForBlockerKind(kind: DeterministicReviewBlockerKind): (s: string) => string {
@@ -67,9 +64,7 @@ function colorForBlockerKind(kind: DeterministicReviewBlockerKind): (s: string) 
 function formatReasons(blockers: readonly DeterministicReviewBlocker[]): string {
   if (blockers.length === 0) return "deterministic=pass";
 
-  return blockers
-    .map((blocker) => `${blocker.kind}: ${blocker.reason}`)
-    .join(" | ");
+  return blockers.map((blocker) => `${blocker.kind}: ${blocker.reason}`).join(" | ");
 }
 
 function summarizeBlockers(blockers: readonly DeterministicReviewBlocker[]): string {
@@ -78,9 +73,7 @@ function summarizeBlockers(blockers: readonly DeterministicReviewBlocker[]): str
   for (const blocker of blockers) {
     counts.set(blocker.kind, (counts.get(blocker.kind) ?? 0) + 1);
   }
-  return [...counts.entries()]
-    .map(([kind, count]) => `${count} ${kind}`)
-    .join(", ");
+  return [...counts.entries()].map(([kind, count]) => `${count} ${kind}`).join(", ");
 }
 
 function formatDeepEvidence(taskReport: DeterministicReviewTaskReport): string {
@@ -99,7 +92,9 @@ function formatDeepEvidence(taskReport: DeterministicReviewTaskReport): string {
       ? `missingVerification=${readiness.missingVerificationCommands.join(", ")}`
       : "",
     readiness.documentedRisks.length > 0 ? `risks=${readiness.documentedRisks.join(" | ")}` : "",
-    readiness.overlappingFiles.length > 0 ? `overlappingFiles=${readiness.overlappingFiles.join(", ")}` : "",
+    readiness.overlappingFiles.length > 0
+      ? `overlappingFiles=${readiness.overlappingFiles.join(", ")}`
+      : "",
     readiness.missingReceiptFields.length > 0
       ? `missingReceiptFields=${readiness.missingReceiptFields.join(", ")}`
       : "",
@@ -168,7 +163,8 @@ function evidenceCoverage(taskReport: DeterministicReviewTaskReport): string {
 
 function reviewerQuestionFor(taskReport: DeterministicReviewTaskReport): string {
   const readiness = taskReport.readiness;
-  const firstReason = taskReport.blockers[0]?.reason ??
+  const firstReason =
+    taskReport.blockers[0]?.reason ??
     readiness?.humanReviewReasons[0] ??
     taskReport.advisories[0]?.reason ??
     "";
@@ -251,7 +247,9 @@ function formatCondensedEvidence(taskReport: DeterministicReviewTaskReport): str
     lines.push(`missingReceiptFields: ${readiness.missingReceiptFields.length} items`);
   }
   if (readiness.uncoveredAcceptanceCriteria.length > 0) {
-    lines.push(`uncoveredAcceptanceCriteria: ${readiness.uncoveredAcceptanceCriteria.length} items`);
+    lines.push(
+      `uncoveredAcceptanceCriteria: ${readiness.uncoveredAcceptanceCriteria.length} items`,
+    );
   }
   return lines;
 }
@@ -293,17 +291,23 @@ function mancipleRootFrom(tasksDir: string): string {
 
 function colorForDecision(decision: "pass" | "escalate" | "blocked"): (text: string) => string {
   switch (decision) {
-    case "pass": return picocolors.green;
-    case "escalate": return picocolors.yellow;
-    case "blocked": return picocolors.red;
+    case "pass":
+      return picocolors.green;
+    case "escalate":
+      return picocolors.yellow;
+    case "blocked":
+      return picocolors.red;
   }
 }
 
 function symbolForDecision(decision: "pass" | "escalate" | "blocked"): string {
   switch (decision) {
-    case "pass": return "✓";
-    case "escalate": return "◐";
-    case "blocked": return "⊘";
+    case "pass":
+      return "✓";
+    case "escalate":
+      return "◐";
+    case "blocked":
+      return "⊘";
   }
 }
 
@@ -314,7 +318,7 @@ function formatDecisionLabel(decision: "pass" | "escalate" | "blocked"): string 
 
 function runTriageMode(
   report: ReturnType<typeof evaluateDeterministicReviewGate>,
-  machine: boolean
+  machine: boolean,
 ): void {
   if (machine) {
     for (const taskReport of report.taskReports) {
@@ -357,16 +361,23 @@ function runTriageMode(
   if (allEntries.length === 0) return;
 
   const idWidth = Math.max(4, ...allEntries.map((e) => e.truncatedId.length));
-  const decisionWidth = Math.max(8, ...allEntries.map((e) => `${symbolForDecision(e.decision)} ${e.decision}`.length));
+  const decisionWidth = Math.max(
+    8,
+    ...allEntries.map((e) => `${symbolForDecision(e.decision)} ${e.decision}`.length),
+  );
   const rule = "─".repeat(idWidth + decisionWidth + 4);
 
   console.log(headerBanner().trimEnd());
-  console.log(`  ${styleCell("TASK", undefined, idWidth)}  ${styleCell("DECISION", undefined, decisionWidth)}  DETAILS`);
+  console.log(
+    `  ${styleCell("TASK", undefined, idWidth)}  ${styleCell("DECISION", undefined, decisionWidth)}  DETAILS`,
+  );
   console.log(`  ${rule}`);
 
   for (const entry of allEntries) {
     const coloredDecision = formatDecisionLabel(entry.decision);
-    console.log(`  ${styleCell(entry.truncatedId, undefined, idWidth)}  ${styleCell(coloredDecision, undefined, decisionWidth)}  ${entry.summary}`);
+    console.log(
+      `  ${styleCell(entry.truncatedId, undefined, idWidth)}  ${styleCell(coloredDecision, undefined, decisionWidth)}  ${entry.summary}`,
+    );
   }
 
   // Detail sections for escalated/blocked tasks
@@ -392,7 +403,7 @@ function runDeepMode(
   includeAll: boolean,
   budget: number | undefined,
   deepOnly: ReviewQueueDeepOnly | undefined,
-  machine: boolean
+  machine: boolean,
 ): void {
   if (machine) {
     // Machine-readable tab-delimited deep output
@@ -423,21 +434,25 @@ function runDeepMode(
       const promptPath = createReviewPrompt(taskReport.taskId, specsTasksDir, generatedDir, cwd);
       usedBudget += packetCost;
       emitted += 1;
-      console.log([
-        decision === "pass" ? "deep-all" : "deep",
-        taskReport.taskId,
-        `prompt=${rel(cwd, promptPath)}`,
-        `packet=${packet}`,
-        `reasons=${formatReasons(taskReport.blockers)}`,
-        `evidence=${formatDeepEvidence(taskReport)}`,
-      ].join("\t"));
+      console.log(
+        [
+          decision === "pass" ? "deep-all" : "deep",
+          taskReport.taskId,
+          `prompt=${rel(cwd, promptPath)}`,
+          `packet=${packet}`,
+          `reasons=${formatReasons(taskReport.blockers)}`,
+          `evidence=${formatDeepEvidence(taskReport)}`,
+        ].join("\t"),
+      );
     }
 
     for (const blocker of report.loadBlockers) {
       console.log(`blocked\t${blocker.taskId}\t${blocker.kind}: ${blocker.reason}`);
     }
 
-    const blockedReports = report.taskReports.filter((task) => decisionFor(task.blockers) === "blocked");
+    const blockedReports = report.taskReports.filter(
+      (task) => decisionFor(task.blockers) === "blocked",
+    );
     for (const taskReport of blockedReports) {
       console.log(`blocked\t${taskReport.taskId}\t${formatReasons(taskReport.blockers)}`);
     }
@@ -490,8 +505,10 @@ function runDeepMode(
     printedFirst = true;
 
     const decisionLabel = formatDecisionLabel(decision);
-    const decisionColor = colorForDecision(decision);
-    console.log(`  ${picocolors.bold("── Task:")} ${truncateId(taskReport.taskId)} ${picocolors.dim("(" + decisionLabel + ")")}`);
+    const _decisionColor = colorForDecision(decision);
+    console.log(
+      `  ${picocolors.bold("── Task:")} ${truncateId(taskReport.taskId)} ${picocolors.dim(`(${decisionLabel})`)}`,
+    );
     console.log(`  ${picocolors.bold("Prompt:")}  ${rel(cwd, promptPath)}`);
     console.log(`  ${picocolors.bold("Packet:")}`);
     for (const line of formatPacketMultiline(taskReport)) {
@@ -510,14 +527,18 @@ function runDeepMode(
   }
 
   // Print blocked tasks at the bottom
-  const blockedReports = report.taskReports.filter((task) => decisionFor(task.blockers) === "blocked");
+  const blockedReports = report.taskReports.filter(
+    (task) => decisionFor(task.blockers) === "blocked",
+  );
   const hasBlocked = blockedReports.length > 0 || report.loadBlockers.length > 0;
 
   if (hasBlocked) {
     if (printedFirst) console.log("");
     console.log(`  ${picocolors.bold(picocolors.red("Blocked tasks:"))}`);
     for (const taskReport of blockedReports) {
-      console.log(`    ${picocolors.red("⊘")} ${truncateId(taskReport.taskId)}  ${summarizeBlockers(taskReport.blockers)}`);
+      console.log(
+        `    ${picocolors.red("⊘")} ${truncateId(taskReport.taskId)}  ${summarizeBlockers(taskReport.blockers)}`,
+      );
     }
     for (const blocker of report.loadBlockers) {
       console.log(`    ${picocolors.red("⊘")} ${blocker.taskId}  ${blocker.kind}`);
@@ -530,17 +551,20 @@ function runDeepMode(
 
   if (budget !== undefined) {
     const budgetColor = emitted > 0 ? picocolors.green : picocolors.yellow;
-    console.log(`\n  ${budgetColor(`Budget: limit=${budget}, fit=${emitted}/${queued}, estimated=${usedBudget}`)}`);
+    console.log(
+      `\n  ${budgetColor(`Budget: limit=${budget}, fit=${emitted}/${queued}, estimated=${usedBudget}`)}`,
+    );
   }
 }
 
 export function reviewQueueCommand(
   specsTasksDir: string,
   cwd: string,
-  options: ReviewQueueCommandOptions = {}
+  options: ReviewQueueCommandOptions = {},
 ): void {
   const mode = options.mode ?? "triage";
-  const generatedDir = options.generatedDir ?? join(mancipleRootFrom(specsTasksDir), "prompts", "generated");
+  const generatedDir =
+    options.generatedDir ?? join(mancipleRootFrom(specsTasksDir), "prompts", "generated");
   const budget = parseBudget(options.budget);
   const deepOnly = options.deepOnly;
 
@@ -578,7 +602,7 @@ export function reviewQueueCommand(
       options.all ?? false,
       budget,
       deepOnly,
-      machine
+      machine,
     );
   } else {
     runTriageMode(report, machine);
@@ -593,7 +617,10 @@ export function reviewQueueCommand(
     }
   }
 
-  if (report.loadBlockers.length > 0 || report.taskReports.some((task) => decisionFor(task.blockers) === "blocked")) {
+  if (
+    report.loadBlockers.length > 0 ||
+    report.taskReports.some((task) => decisionFor(task.blockers) === "blocked")
+  ) {
     process.exit(1);
   }
 }

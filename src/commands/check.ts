@@ -1,13 +1,11 @@
 import type { Command } from "commander";
-import { doctorCommand } from "./doctor.js";
-import { validateCommand } from "./validate.js";
-import { checkLifecycleCommand } from "./checkLifecycle.js";
-import type { CheckLifecycleCommandOptions } from "./checkLifecycle.js";
-import { verifyCommand } from "./verify.js";
-import { tokenEstimateCommand, DEFAULT_TOKEN_BUDGET } from "./tokenEstimate.js";
-import type { TokenEstimateOptions } from "./tokenEstimate.js";
-import { summarizeRunCostCommand } from "./summarizeRunCost.js";
 import type { ManciplePaths } from "../utils/paths.js";
+import { checkLifecycleCommand } from "./checkLifecycle.js";
+import { doctorCommand } from "./doctor.js";
+import { summarizeRunCostCommand } from "./summarizeRunCost.js";
+import { DEFAULT_TOKEN_BUDGET, tokenEstimateCommand } from "./tokenEstimate.js";
+import { validateCommand } from "./validate.js";
+import { verifyCommand } from "./verify.js";
 
 export interface CheckContext {
   cwd: string;
@@ -105,13 +103,15 @@ export function registerCheckCommands(
   program: Command,
   p: ManciplePaths,
   cwd: string,
-  root: string
+  root: string,
 ): void {
   const ctx = createCheckContext(p, cwd, root);
 
   const check = program
     .command("check")
-    .description("Health summary, validation, lifecycle check, and diagnostics. See `manciple check --help`.")
+    .description(
+      "Health summary, validation, lifecycle check, and diagnostics. See `manciple check --help`.",
+    )
     .action(() => {
       checkDefaultCommand(ctx);
     });
@@ -190,32 +190,46 @@ export function registerCheckCommands(
   program
     .command("token-estimate <task-id>")
     .description("Estimate Manciple handoff prompt size using a deterministic local heuristic.")
-    .option("--budget <tokens>", "Estimated-token budget for risk reporting.", parseNumberOption, DEFAULT_TOKEN_BUDGET)
+    .option(
+      "--budget <tokens>",
+      "Estimated-token budget for risk reporting.",
+      parseNumberOption,
+      DEFAULT_TOKEN_BUDGET,
+    )
     .option("--include-review", "Include generated review prompt estimate.", false)
     .option("--include-run-log", "Include latest run log estimate.", false)
     .option("--include-diff", "Include git diff estimate.", false)
     .option("--include-git-context", "Include compact git status context estimate.", false)
-    .option("--append-run-log", "Append the token-estimate section to the latest existing run log.", false)
-    .action((taskId: string, opts: {
-      budget: number;
-      includeReview: boolean;
-      includeRunLog: boolean;
-      includeDiff: boolean;
-      includeGitContext: boolean;
-      appendRunLog: boolean;
-    }) => {
-      tokenEstimateCommand({
-        specsTasksDir: p.specsTasks,
-        cwd,
-        taskId,
-        budget: opts.budget,
-        includeReview: opts.includeReview,
-        includeRunLog: opts.includeRunLog,
-        includeDiff: opts.includeDiff,
-        includeGitContext: opts.includeGitContext,
-        appendRunLog: opts.appendRunLog,
-      });
-    });
+    .option(
+      "--append-run-log",
+      "Append the token-estimate section to the latest existing run log.",
+      false,
+    )
+    .action(
+      (
+        taskId: string,
+        opts: {
+          budget: number;
+          includeReview: boolean;
+          includeRunLog: boolean;
+          includeDiff: boolean;
+          includeGitContext: boolean;
+          appendRunLog: boolean;
+        },
+      ) => {
+        tokenEstimateCommand({
+          specsTasksDir: p.specsTasks,
+          cwd,
+          taskId,
+          budget: opts.budget,
+          includeReview: opts.includeReview,
+          includeRunLog: opts.includeRunLog,
+          includeDiff: opts.includeDiff,
+          includeGitContext: opts.includeGitContext,
+          appendRunLog: opts.appendRunLog,
+        });
+      },
+    );
 
   program
     .command("summarize-run-cost [task-id]")
@@ -224,4 +238,3 @@ export function registerCheckCommands(
       summarizeRunCostCommand(p.runs, taskId);
     });
 }
-

@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync } from "fs";
-import { relative } from "path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { relative } from "node:path";
 import { parse } from "yaml";
 import { loadTasks } from "../specs/loadTasks.js";
 import { formatYamlDocument } from "../utils/yamlFormat.js";
@@ -29,7 +29,7 @@ export function formatTaskById(taskId: string, options: FormatTaskOptions): Form
     throw new Error(
       taskLoadErrors.length > 0
         ? `Task ${taskId} could not be loaded: ${taskLoadErrors.join("; ")}`
-        : `Task not found: ${taskId}`
+        : `Task not found: ${taskId}`,
     );
   }
 

@@ -235,11 +235,7 @@ export function reviewPromptFilename(taskId: string): string {
   return `review-${taskId}.md`;
 }
 
-export function renderTemplate(
-  template: string,
-  spec: TaskSpec,
-  domainContext?: string
-): string {
+export function renderTemplate(template: string, spec: TaskSpec, domainContext?: string): string {
   const rendered = template
     .replace(/{{title}}/g, spec.title)
     .replace(/{{id}}/g, spec.id)
@@ -248,35 +244,29 @@ export function renderTemplate(
     .replace(/{{priority}}/g, spec.priority ?? "medium")
     .replace(/{{status}}/g, spec.status)
     .replace(/{{goal}}/g, spec.goal.trim())
-    .replace(
-      /{{depends_on}}/g,
-      formatList(spec.depends_on?.length ? spec.depends_on : undefined)
-    )
+    .replace(/{{depends_on}}/g, formatList(spec.depends_on?.length ? spec.depends_on : undefined))
     .replace(
       /{{allowed_paths}}/g,
-      formatList(spec.allowed_paths?.length ? spec.allowed_paths : undefined)
+      formatList(spec.allowed_paths?.length ? spec.allowed_paths : undefined),
     )
     .replace(
       /{{forbidden_paths}}/g,
-      formatList(spec.forbidden_paths?.length ? spec.forbidden_paths : undefined)
+      formatList(spec.forbidden_paths?.length ? spec.forbidden_paths : undefined),
     )
     .replace(/{{acceptance_criteria}}/g, formatList(spec.acceptance_criteria))
     .replace(
       /{{implementation_notes}}/g,
-      formatList(spec.implementation_notes?.length ? spec.implementation_notes : undefined)
+      formatList(spec.implementation_notes?.length ? spec.implementation_notes : undefined),
     )
     .replace(
       /{{verification_commands}}/g,
-      renderVerificationCommands(spec.verification?.commands ?? [])
+      renderVerificationCommands(spec.verification?.commands ?? []),
     )
     .replace(
       /{{outputs_required}}/g,
-      formatList(spec.outputs_required?.length ? spec.outputs_required : undefined)
+      formatList(spec.outputs_required?.length ? spec.outputs_required : undefined),
     )
-    .replace(
-      /{{notes}}/g,
-      formatList(spec.notes?.length ? spec.notes : undefined)
-    );
+    .replace(/{{notes}}/g, formatList(spec.notes?.length ? spec.notes : undefined));
 
   if (!domainContext) return rendered;
   return `## Domain Context\n\n${domainContext}\n\n${rendered}`;

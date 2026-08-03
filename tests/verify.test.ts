@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  VERIFY_PROFILES,
   parseVerifyProfile,
   runVerifyProfile,
-  verifyCommand,
+  VERIFY_PROFILES,
   type VerifyCommandRunner,
+  verifyCommand,
 } from "../src/commands/verify.js";
 
 describe("verify profiles", () => {
@@ -36,7 +36,7 @@ describe("verify profiles", () => {
         command,
         exit_code: 0,
         ok: true,
-      }))
+      })),
     );
     expect(JSON.stringify(receipt)).not.toContain("passing output");
   });
@@ -95,7 +95,7 @@ describe("verify profiles", () => {
 
   it("rejects unknown profiles with a clear error", () => {
     expect(() => parseVerifyProfile("nightly")).toThrow(
-      'Unknown verify profile: "nightly". Allowed: coordinator, worker, review'
+      'Unknown verify profile: "nightly". Allowed: coordinator, worker, review',
     );
   });
 
@@ -108,7 +108,7 @@ describe("verify profiles", () => {
     await expect(verifyCommand("nightly", "/repo")).rejects.toThrow("process.exit(1)");
 
     expect(error).toHaveBeenCalledWith(
-      'Unknown verify profile: "nightly". Allowed: coordinator, worker, review'
+      'Unknown verify profile: "nightly". Allowed: coordinator, worker, review',
     );
     expect(exit).toHaveBeenCalledWith(1);
   });

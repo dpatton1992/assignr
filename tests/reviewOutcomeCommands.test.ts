@@ -1,24 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { spawnSync } from "child_process";
-
+import { approveCommand } from "../src/commands/approve.js";
+import { blockReviewCommand } from "../src/commands/blockReview.js";
 import { initCommand } from "../src/commands/init.js";
 import { newCommand } from "../src/commands/new.js";
-import { setStatusCommand } from "../src/commands/setStatus.js";
-import { approveCommand } from "../src/commands/approve.js";
-import { requestChangesCommand } from "../src/commands/requestChanges.js";
-import { blockReviewCommand } from "../src/commands/blockReview.js";
 import { reopenCommand } from "../src/commands/reopen.js";
+import { requestChangesCommand } from "../src/commands/requestChanges.js";
+import { setStatusCommand } from "../src/commands/setStatus.js";
 import {
   approveTask,
   blockReview as blockReviewAction,
+  ReviewActionError,
   rejectTask,
   reopenTask,
   requestChanges as requestChangesAction,
-  ReviewActionError,
 } from "../src/review/reviewActions.js";
 import { getPaths } from "../src/utils/paths.js";
 
@@ -46,7 +45,7 @@ function createTaskInReview(title = "Review outcome test"): string {
 }
 
 function readTaskStatus(filePath: string): unknown {
-  return (parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>)["status"];
+  return (parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>).status;
 }
 
 function latestOutcome(): string {
@@ -90,16 +89,16 @@ describe("review outcome commands", () => {
     for (const harness of [".codex", ".claude"]) {
       const skill = readFileSync(
         join(process.cwd(), harness, "skills", "manciple-review", "SKILL.md"),
-        "utf-8"
+        "utf-8",
       );
 
-      expect(skill).toContain(
-        "manciple review check <task-id> --deterministic --machine"
-      );
+      expect(skill).toContain("manciple review check <task-id> --deterministic --machine");
       expect(skill).toContain("Do not call `manciple_run_log` for a review verdict");
       expect(skill).toContain("manciple request-changes <task-id> --reason");
       expect(skill).toContain("globally installed public package");
-      expect(skill).toContain("Do not invoke `src/cli.ts`, `bin/manciple.js`, or `pnpm exec manciple`");
+      expect(skill).toContain(
+        "Do not invoke `src/cli.ts`, `bin/manciple.js`, or `pnpm exec manciple`",
+      );
       expect(skill).not.toContain("node --import tsx src/cli.ts");
       expect(skill).not.toContain("node bin/manciple.js review check");
     }
@@ -200,12 +199,14 @@ describe("review outcome commands", () => {
   });
 
   it("exits clearly when approving a missing task", () => {
-    const message = expectExit(() => approveCommand("missing-task", {
-      specsTasksDir: p.specsTasks,
-      completedDir: p.tasksCompleted,
-      runsDir: p.runs,
-      cwd,
-    }));
+    const message = expectExit(() =>
+      approveCommand("missing-task", {
+        specsTasksDir: p.specsTasks,
+        completedDir: p.tasksCompleted,
+        runsDir: p.runs,
+        cwd,
+      }),
+    );
 
     expect(message).toContain("Task not found: missing-task");
   });
@@ -219,22 +220,26 @@ describe("review outcome commands", () => {
       activeDir: p.tasksActive,
     });
 
-    const message = expectExit(() => approveCommand("approve-too-soon", {
-      specsTasksDir: p.specsTasks,
-      completedDir: p.tasksCompleted,
-      runsDir: p.runs,
-      cwd,
-    }));
+    const message = expectExit(() =>
+      approveCommand("approve-too-soon", {
+        specsTasksDir: p.specsTasks,
+        completedDir: p.tasksCompleted,
+        runsDir: p.runs,
+        cwd,
+      }),
+    );
 
     expect(message).toContain("expected needs_review, found pending");
   });
 
   it("exits clearly when requesting changes for a missing task", () => {
-    const message = expectExit(() => requestChangesCommand("missing-task", "Needs work.", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    }));
+    const message = expectExit(() =>
+      requestChangesCommand("missing-task", "Needs work.", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    );
 
     expect(message).toContain("Task not found: missing-task");
   });
@@ -248,43 +253,51 @@ describe("review outcome commands", () => {
       activeDir: p.tasksActive,
     });
 
-    const message = expectExit(() => requestChangesCommand("not-ready", "Needs work.", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    }));
+    const message = expectExit(() =>
+      requestChangesCommand("not-ready", "Needs work.", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    );
 
     expect(message).toContain("expected needs_review, found pending");
   });
 
   it("requires a non-empty reason for request changes", () => {
     const taskId = createTaskInReview();
-    const message = expectExit(() => requestChangesCommand(taskId, " ", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    }));
+    const message = expectExit(() =>
+      requestChangesCommand(taskId, " ", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    );
 
     expect(message).toContain("required option '--reason <text>' must not be empty");
   });
 
   it("requires a non-empty reason for block review", () => {
     const taskId = createTaskInReview();
-    const message = expectExit(() => blockReviewCommand(taskId, "", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    }));
+    const message = expectExit(() =>
+      blockReviewCommand(taskId, "", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    );
 
     expect(message).toContain("required option '--reason <text>' must not be empty");
   });
 
   it("exits clearly when blocking review for a missing task", () => {
-    const message = expectExit(() => blockReviewCommand("missing-task", "Waiting on evidence.", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    }));
+    const message = expectExit(() =>
+      blockReviewCommand("missing-task", "Waiting on evidence.", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    );
 
     expect(message).toContain("Task not found: missing-task");
   });
@@ -298,11 +311,13 @@ describe("review outcome commands", () => {
       activeDir: p.tasksActive,
     });
 
-    const message = expectExit(() => blockReviewCommand("blocked-too-soon", "Waiting on evidence.", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    }));
+    const message = expectExit(() =>
+      blockReviewCommand("blocked-too-soon", "Waiting on evidence.", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    );
 
     expect(message).toContain("expected needs_review, found pending");
   });
@@ -360,16 +375,20 @@ describe("shared review action layer", () => {
   it("rejectTask requires a non-empty reason", () => {
     const taskId = createTaskInReview();
 
-    expect(() => rejectTask(taskId, " ", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    })).toThrow(ReviewActionError);
-    expect(() => rejectTask(taskId, "", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    })).toThrow("required option '--reason <text>' must not be empty");
+    expect(() =>
+      rejectTask(taskId, " ", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    ).toThrow(ReviewActionError);
+    expect(() =>
+      rejectTask(taskId, "", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    ).toThrow("required option '--reason <text>' must not be empty");
   });
 
   it("rejectTask only accepts tasks in needs_review", () => {
@@ -381,11 +400,13 @@ describe("shared review action layer", () => {
       activeDir: p.tasksActive,
     });
 
-    expect(() => rejectTask("reject-too-soon", "Needs work.", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    })).toThrow("expected needs_review, found pending");
+    expect(() =>
+      rejectTask("reject-too-soon", "Needs work.", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    ).toThrow("expected needs_review, found pending");
   });
 
   it("blockReview action returns the blocked lifecycle result", () => {
@@ -477,17 +498,21 @@ describe("shared review action layer", () => {
   it("review actions validate lifecycle transitions before writing task files", () => {
     const taskId = createTaskInReview();
 
-    expect(() => approveTask(taskId, {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    })).toThrow(ReviewActionError);
-    expect(() => approveTask(taskId, {
-      specsTasksDir: p.specsTasks,
-      completedDir: p.tasksCompleted,
-      runsDir: p.runs,
-      cwd,
-    })).not.toThrow();
+    expect(() =>
+      approveTask(taskId, {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    ).toThrow(ReviewActionError);
+    expect(() =>
+      approveTask(taskId, {
+        specsTasksDir: p.specsTasks,
+        completedDir: p.tasksCompleted,
+        runsDir: p.runs,
+        cwd,
+      }),
+    ).not.toThrow();
 
     newCommand("Action blocked task", {
       type: "implementation",
@@ -496,10 +521,12 @@ describe("shared review action layer", () => {
       cwd,
       activeDir: p.tasksActive,
     });
-    expect(() => blockReviewAction("action-blocked-task", "Needs evidence.", {
-      specsTasksDir: p.specsTasks,
-      runsDir: p.runs,
-      cwd,
-    })).toThrow("expected needs_review, found pending");
+    expect(() =>
+      blockReviewAction("action-blocked-task", "Needs evidence.", {
+        specsTasksDir: p.specsTasks,
+        runsDir: p.runs,
+        cwd,
+      }),
+    ).toThrow("expected needs_review, found pending");
   });
 });

@@ -1,11 +1,11 @@
-import React from "react";
 import { render } from "ink";
+import React from "react";
 import type { ManciplePaths } from "../utils/paths.js";
-import { createReviewService } from "./service.js";
-import { createGraphService } from "./graphService.js";
-import { ReviewTui } from "./app.js";
 import type { ReviewTuiSession } from "./app.js";
+import { ReviewTui } from "./app.js";
+import { createGraphService } from "./graphService.js";
 import { openInPager } from "./pager.js";
+import { createReviewService } from "./service.js";
 
 export interface ReviewTuiRunOptions {
   env?: NodeJS.ProcessEnv;
@@ -21,7 +21,11 @@ export interface ReviewTuiRunOptions {
  * returns to the same task and view. The function resolves only when the user
  * actually quits (q / Escape / Ctrl-C).
  */
-export async function runReviewTui(p: ManciplePaths, cwd: string, options: ReviewTuiRunOptions = {}): Promise<void> {
+export async function runReviewTui(
+  p: ManciplePaths,
+  cwd: string,
+  options: ReviewTuiRunOptions = {},
+): Promise<void> {
   const service = createReviewService(p, cwd);
   const graphService = createGraphService(p, cwd);
   const env = options.env ?? process.env;
@@ -42,7 +46,7 @@ export async function runReviewTui(p: ManciplePaths, cwd: string, options: Revie
           app?.unmount();
         },
       }),
-      { exitOnCtrlC: false }
+      { exitOnCtrlC: false },
     );
     await app.waitUntilExit();
 
