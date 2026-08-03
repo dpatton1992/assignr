@@ -77,5 +77,6 @@
 		"tsx": "^4.19.0",
 		"typescript": "^5.7.0",
 		"vitest": "^3.2.6"
-	}
+	},
+	"packageManager": "pnpm@11.20.0+sha256.34e198cb1e43237517ecedfd31f9ae26a6c0a3e5366ce58a2d05f4b21fb5f19a"
 }

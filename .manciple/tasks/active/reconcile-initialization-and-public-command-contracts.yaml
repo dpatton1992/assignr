@@ -1,0 +1,93 @@
+id: reconcile-initialization-and-public-command-contracts
+title: Reconcile initialization and public command contracts
+status: pending
+type: hardening
+domain: core
+priority: high
+depends_on:
+  - implement-managed-worktree-execution
+  - centralize-task-creation-and-lifecycle-services
+  - enforce-release-tag-package-version-invariant
+allowed_paths:
+  - README.md
+  - docs/getting-started.md
+  - docs/mcp-server.md
+  - docs/opencode-agents.md
+  - docs/agent-skills.md
+  - src/cli.ts
+  - src/version.ts
+  - src/mcp.ts
+  - src/commands/init.ts
+  - src/commands/mcpConfig.ts
+  - src/commands/new.ts
+  - src/commands/validate.ts
+  - .manciple/commands/README.md
+  - .git/config
+  - tests/happyPath.test.ts
+  - tests/cliWorkflow.test.ts
+  - tests/mcpList.test.ts
+forbidden_paths:
+  - src/worktrees/**
+  - src/review/**
+  - .manciple/tasks/completed/**
+  - dist/**
+goal: Documentation, initialization side effects, command guidance, MCP identity,
+  package metadata, and the repository remote all describe one current Manciple
+  contract.
+acceptance_criteria:
+  - README and focused setup documentation accurately describe what a default manciple
+    init creates, what --mcp and --agents do, which files are repo-local, and whether
+    any user-global configuration is changed.
+  - Default initialization is idempotent and limits automatic writes to the target
+    repository; user-global OpenCode configuration is not changed without a separate
+    explicit user action.
+  - The generated commands README template and this repository's
+    .manciple/commands/README.md use Manciple names and the canonical task new, handoff,
+    run-log, and review workflow.
+  - Post-create, empty-queue, validation, and init hints consistently recommend
+    canonical non-deprecated commands, while documented legacy aliases remain
+    functional.
+  - The CLI and MCP server report the same version sourced from package.json, with no
+    hard-coded stale MCP version.
+  - The origin fetch and push URLs are both https://github.com/dpatton1992/manciple.git,
+    and verification records the local configuration change even though it is not a
+    tracked source diff.
+  - Tests cover init idempotency and scope, command hints, generated command
+    documentation, and MCP server version parity.
+  - Public docs continue to describe managed worktrees as the default and the existing
+    review architecture without changing their behavior.
+implementation_notes:
+  - Treat repository-local initialization as the safe default contract. If global
+    OpenCode setup remains supported, expose it only through an explicit command or flag
+    and document that side effect before execution.
+  - Use a single package-version loader that works from both source execution and built
+    dist entry points; do not duplicate a literal version in CLI and MCP modules.
+  - Prefer manciple task new for new guidance and manciple handoff for agent-ready
+    output. Keep manciple new and manciple compile only where explicitly labeled as
+    compatibility aliases.
+  - Update the stale origin with git remote set-url rather than editing tracked files or
+    rewriting history; do not push, fetch, or publish as part of this task.
+  - Reconcile only the setup and command-reference documents listed in allowed_paths; do
+    not broaden this into a full documentation rewrite.
+  - Split src/commands/init.ts or src/commands/mcpConfig.ts only by extracting cohesive
+    setup or rendering helpers already changed for this contract.
+  - Preserve worktree and review module boundaries and behavior.
+verification:
+  commands:
+    - pnpm exec vitest run tests/happyPath.test.ts tests/cliWorkflow.test.ts
+      tests/mcpList.test.ts
+    - test "$(git remote get-url origin)" = "https://github.com/dpatton1992/manciple.git"
+    - test "$(git remote get-url --push origin)" =
+      "https://github.com/dpatton1992/manciple.git"
+    - pnpm typecheck
+    - pnpm test
+outputs_required:
+  - files_changed
+  - tests_run
+  - risks
+notes:
+  - Current drift includes a hard-coded MCP version 0.1.0, an origin still targeting
+    assignr.git, legacy compile guidance after task creation, and a checked-in generated
+    commands README that still says Assignr.
+  - This task follows the shared-service refactor because both tasks touch
+    src/commands/new.ts and related adapter tests.

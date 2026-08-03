@@ -1,0 +1,89 @@
+id: centralize-task-creation-and-lifecycle-services
+title: Centralize task creation and lifecycle services
+status: pending
+type: refactor
+domain: core
+priority: high
+depends_on:
+  - implement-managed-worktree-execution
+allowed_paths:
+  - src/tasks/**
+  - src/lifecycle/**
+  - src/commands/new.ts
+  - src/commands/task.ts
+  - src/commands/setStatus.ts
+  - src/commands/complete.ts
+  - src/commands/archive.ts
+  - src/commands/reopen.ts
+  - src/commands/requestChanges.ts
+  - src/commands/approve.ts
+  - src/commands/blockReview.ts
+  - src/mcp/taskSpecTools.ts
+  - src/mcp/taskHelpers.ts
+  - tests/taskCreationService.test.ts
+  - tests/taskLifecycleService.test.ts
+  - tests/cliWorkflow.test.ts
+  - tests/happyPath.test.ts
+  - tests/mcpList.test.ts
+forbidden_paths:
+  - src/worktrees/**
+  - src/review/**
+  - .manciple/tasks/completed/**
+  - dist/**
+goal: CLI commands and MCP tools delegate task creation and lifecycle transitions to
+  shared application services with identical validation and persistence semantics.
+acceptance_criteria:
+  - A shared task-creation service owns slug generation, duplicate detection across
+    active, completed, and archived tiers, default normalization, schema validation,
+    YAML formatting, directory creation, and file persistence.
+  - Both manciple task new or its legacy alias and manciple_create call the shared
+    task-creation service instead of independently implementing creation rules.
+  - A shared lifecycle service owns task lookup, transition validation, tier placement
+    or movement, direct-completion safeguards, and managed-worktree claim-state
+    synchronization.
+  - CLI lifecycle commands and manciple_set_status delegate to the lifecycle service and
+    retain their existing human-readable or structured adapter-specific outputs.
+  - The services return typed result or error values and never print, call process.exit,
+    or construct MCP response payloads.
+  - CLI and MCP parity tests cover successful creation, duplicate IDs in every tier,
+    invalid inputs, successful status changes, invalid transitions, tier movement,
+    completion safeguards, and worktree claim-state changes.
+  - Existing command aliases, task YAML shape, status names, worktree defaults, and
+    review outcome behavior remain backward compatible.
+implementation_notes:
+  - Place domain and application behavior in cohesive modules under src/tasks and
+    src/lifecycle; keep Commander registration and MCP schema or response conversion in
+    their adapter modules.
+  - Preserve the non-interactive CLI's current scaffold semantics and the interactive
+    CLI's collected fields, but route the resulting draft through the same validation
+    and persistence pipeline as MCP.
+  - MCP continues to require a fully specified goal, acceptance criteria, and
+    verification commands; adapter-specific input requirements may differ while
+    normalized service behavior stays shared.
+  - Worktree completion guards and claim-state updates must be injected or called
+    through the lifecycle service without moving or redesigning src/worktrees.
+  - Review approve, request-changes, and block semantics remain owned by the existing
+    review application layer; adapt only the lifecycle boundary needed to avoid
+    duplicate status persistence.
+  - Split src/commands/new.ts, src/commands/task.ts, or src/mcp/taskSpecTools.ts only
+    where extracting the shared services or focused registration helpers makes those
+    changed modules materially easier to review.
+  - Do not perform unrelated cleanup in review or worktree modules.
+verification:
+  commands:
+    - pnpm exec vitest run tests/taskCreationService.test.ts
+      tests/taskLifecycleService.test.ts tests/cliWorkflow.test.ts
+      tests/happyPath.test.ts tests/mcpList.test.ts
+    - pnpm typecheck
+    - pnpm test
+outputs_required:
+  - files_changed
+  - tests_run
+  - risks
+notes:
+  - Creation and lifecycle are one task because both currently share
+    src/mcp/taskSpecTools.ts and src/commands/task.ts; splitting them into sibling tasks
+    would create avoidable path and adapter conflicts.
+  - Path overlap with implement-managed-worktree-execution is intentional at the task
+    adapters only; that task must finish review first, and worktree or review internals
+    are forbidden here.

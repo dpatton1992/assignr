@@ -1,0 +1,81 @@
+id: type-check-tests-and-add-biome-quality-gates
+title: Type-check tests and add Biome quality gates
+status: pending
+type: hardening
+domain: core
+priority: medium
+depends_on:
+  - centralize-task-creation-and-lifecycle-services
+  - enforce-release-tag-package-version-invariant
+  - reconcile-initialization-and-public-command-contracts
+allowed_paths:
+  - package.json
+  - pnpm-lock.yaml
+  - tsconfig.json
+  - tsconfig.build.json
+  - biome.json
+  - .github/workflows/unit-tests.yml
+  - .github/workflows/pack-install-smoke.yml
+  - .github/workflows/pages.yml
+  - src/**
+  - tests/**
+  - scripts/**
+  - vitest.config.ts
+forbidden_paths:
+  - .manciple/tasks/completed/**
+  - dist/**
+  - coverage/**
+goal: Production code, tests, and TypeScript scripts are type-checked and consistently
+  formatted and linted by fast local and CI quality gates.
+acceptance_criteria:
+  - The default typecheck command includes src, tests, TypeScript scripts, and
+    TypeScript configuration files without emitting build artifacts.
+  - A separate production build configuration emits declarations and JavaScript from src
+    only, so including tests in typecheck does not change the published package layout.
+  - Biome is added as the single lightweight code formatter and static linter for
+    supported TypeScript, JavaScript, JSON, and configuration files.
+  - Package scripts provide write-mode formatting and non-mutating format or lint
+    checks, and the existing lint command composes code checks, Manciple YAML checks,
+    and TypeScript type-checking.
+  - Existing source, tests, and scripts are brought into compliance with the committed
+    formatter configuration, with any suppression narrow and justified inline.
+  - CI runs the same frozen-install lint, typecheck, test, and build gates used locally,
+    without duplicating incompatible command definitions across workflows.
+  - pnpm prepublishOnly continues to run all release-blocking quality gates before
+    packaging.
+  - No behavior, public API, worktree semantics, or review semantics changes solely as a
+    consequence of formatting and lint adoption.
+implementation_notes:
+  - Use tsconfig.build.json for emitted production builds and make tsconfig.json the
+    no-emit editor and verification project that includes tests and scripts.
+  - Configure Biome explicitly in biome.json and pin a repository-compatible version in
+    pnpm-lock.yaml; do not add ESLint, Prettier, or overlapping formatter stacks.
+  - Keep generated output, coverage, package artifacts, vendored dependencies, and
+    Manciple run or prompt evidence excluded from code formatting.
+  - Fix real type and lint errors rather than weakening strict TypeScript globally. Any
+    rule disabled for the repository must include a concrete compatibility reason in
+    biome.json or task evidence.
+  - Formatting-only changes to src/worktrees or src/review must remain mechanical; they
+    must not alter or restructure those architectures.
+  - Mechanical formatting does not count as an opportunity to split a module. Split only
+    a large module that requires substantive edits for type or lint correctness, and
+    only along a cohesive existing boundary.
+  - Run this task after the implementation and reconciliation tasks so the initial
+    formatting baseline does not create sibling-task merge conflicts.
+verification:
+  commands:
+    - pnpm install --frozen-lockfile
+    - pnpm run lint
+    - pnpm run build
+    - pnpm test
+    - pnpm exec biome check .
+outputs_required:
+  - files_changed
+  - tests_run
+  - risks
+notes:
+  - This final task intentionally has broad source and test paths because establishing
+    the first formatter baseline is repository-wide; its dependencies serialize that
+    overlap.
+  - The current tsconfig rootDir and include settings exclude tests entirely, and the
+    existing lint script only checks Manciple YAML plus source-only TypeScript.
