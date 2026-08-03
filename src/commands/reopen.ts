@@ -1,4 +1,4 @@
-import { reopenTask, ReviewActionError } from "../review/reviewActions.js";
+import { reopenTask, ReviewActionError } from "../lifecycle/taskLifecycleService.js";
 import { colorForStatus } from "../utils/styling.js";
 import picocolors from "picocolors";
 
