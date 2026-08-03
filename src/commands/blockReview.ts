@@ -1,8 +1,8 @@
 import {
   blockReview as blockReviewAction,
   ReviewActionError,
-} from "../review/reviewActions.js";
-import type { ReviewActionOptions } from "../review/reviewActions.js";
+} from "../lifecycle/taskLifecycleService.js";
+import type { ReviewActionOptions } from "../lifecycle/taskLifecycleService.js";
 import { colorForStatus } from "../utils/styling.js";
 import picocolors from "picocolors";
 

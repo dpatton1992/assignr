@@ -1,18 +1,15 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { join, relative } from "path";
+import { readFileSync } from "fs";
+import { relative } from "path";
 import { z } from "zod";
 import { parse } from "yaml";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { PRIORITIES, STATUSES, TASK_TYPES } from "../constants.js";
 import type { Status } from "../constants.js";
-import { TaskSpecSchema } from "../specs/schema.js";
-import { slugify } from "../utils/slugify.js";
-import { formatYamlDocument } from "../utils/yamlFormat.js";
+import { createTask } from "../tasks/taskCreationService.js";
+import { setTaskStatusWithLifecycle } from "../lifecycle/taskLifecycleService.js";
 import { getRepoContext, repoInputSchema } from "./context.js";
 import { errorResult, jsonResult, toolResult } from "./results.js";
 import { findTask } from "./taskHelpers.js";
-import { setTaskStatus } from "../commands/setStatus.js";
-import { assertDirectCompletionAllowed, isGitRepository, setManagedWorktreeState } from "../worktrees/manager.js";
 
 export function registerTaskSpecTools(server: McpServer): void {
   server.registerTool(
@@ -56,49 +53,33 @@ export function registerTaskSpecTools(server: McpServer): void {
     }) =>
       toolResult(() => {
         const ctx = getRepoContext(repo);
-        const id = slugify(title);
-
-        const existing = findTask(id, ctx);
-        if (existing) {
-          return errorResult(
-            `A task with id "${id}" already exists at ${relative(ctx.cwd, existing.filePath)}. Choose a different title or update the existing task.`
-          );
-        }
-
-        const spec = {
-          id,
+        const result = createTask({
           title,
-          status: "pending" as const,
           type,
           domain,
-          priority: priority ?? "medium",
-          depends_on: depends_on ?? [],
-          allowed_paths: allowed_paths ?? [],
-          forbidden_paths: forbidden_paths ?? [],
+          priority,
           goal,
-          acceptance_criteria,
-          implementation_notes: implementation_notes ?? [],
-          verification: { commands: verification_commands },
-          outputs_required: outputs_required ?? ["files_changed", "tests_run", "risks"],
-          notes: notes ?? [],
-        };
+          acceptanceCriteria: acceptance_criteria,
+          implementationNotes: implementation_notes,
+          verificationCommands: verification_commands,
+          allowedPaths: allowed_paths,
+          forbiddenPaths: forbidden_paths,
+          dependsOn: depends_on,
+          outputsRequired: outputs_required,
+          notes,
+          activeDir: ctx.paths.tasksActive,
+        });
 
-        const parsed = TaskSpecSchema.safeParse(spec);
-        if (!parsed.success) {
-          const messages = parsed.error.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join("; ");
-          return errorResult(`Invalid task spec: ${messages}`);
+        if (!result.ok) {
+          if (result.code === "duplicate" && result.existingPath) {
+            return errorResult(
+              `A task with id "${result.id}" already exists at ${relative(ctx.cwd, result.existingPath)}. Choose a different title or update the existing task.`
+            );
+          }
+          return errorResult(result.message);
         }
 
-        if (!existsSync(ctx.paths.tasksActive)) {
-          mkdirSync(ctx.paths.tasksActive, { recursive: true });
-        }
-
-        const filePath = join(ctx.paths.tasksActive, `${id}.yaml`);
-        writeFileSync(filePath, formatYamlDocument(parsed.data), "utf-8");
-
-        return jsonResult({ id, file_path: relative(ctx.cwd, filePath) });
+        return jsonResult({ id: result.id, file_path: relative(ctx.cwd, result.filePath) });
       })
   );
 
@@ -145,26 +126,14 @@ export function registerTaskSpecTools(server: McpServer): void {
         const found = findTask(task_id, ctx);
         if (!found) return errorResult(`Task not found: ${task_id}`);
 
-        if (status === "complete") {
-          assertDirectCompletionAllowed(task_id, {
-            controlRepo: ctx.cwd,
-            worktreesDir: ctx.paths.worktrees,
-            specsTasksDir: ctx.paths.specsTasks,
-          });
-        }
+        const result = setTaskStatusWithLifecycle(task_id, status as Status, {
+          specsTasksDir: ctx.paths.specsTasks,
+          controlRepo: ctx.cwd,
+          worktreesDir: ctx.paths.worktrees,
+        });
 
-        const result = setTaskStatus(task_id, status as Status, ctx.paths.specsTasks);
-        const claimState = status === "needs_review"
-          ? "review_ready"
-          : status === "in_progress" || status === "blocked" || status === "partial" || status === "failed"
-            ? "available"
-            : undefined;
-        if (claimState && isGitRepository(ctx.cwd)) {
-          setManagedWorktreeState(task_id, claimState, {
-            controlRepo: ctx.cwd,
-            worktreesDir: ctx.paths.worktrees,
-            specsTasksDir: ctx.paths.specsTasks,
-          });
+        if (!result.ok) {
+          return errorResult(result.message ?? "Task status update failed.");
         }
 
         return jsonResult({

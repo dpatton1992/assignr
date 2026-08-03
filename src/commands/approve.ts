@@ -1,4 +1,4 @@
-import { approveTask, ReviewActionError } from "../review/reviewActions.js";
+import { approveTask, ReviewActionError } from "../lifecycle/taskLifecycleService.js";
 import picocolors from "picocolors";
 
 export interface ReviewOutcomeCommandOptions {

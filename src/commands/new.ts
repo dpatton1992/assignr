@@ -1,12 +1,9 @@
 import { createInterface } from "readline/promises";
 import { stdin as defaultInput, stdout as defaultOutput } from "process";
 import type { Readable, Writable } from "stream";
-import { writeFileSync, existsSync, mkdirSync } from "fs";
-import { join } from "path";
-import { slugify } from "../utils/slugify.js";
-import { formatYamlDocument } from "../utils/yamlFormat.js";
 import { TASK_TYPES, PRIORITIES } from "../constants.js";
 import type { TaskType, Priority } from "../constants.js";
+import { createTask } from "../tasks/taskCreationService.js";
 
 export interface NewTaskOptions {
   type: TaskType;
@@ -58,84 +55,39 @@ const defaultSpecValues: NewTaskSpecValues = {
   notes: ["TODO: add any notes or constraints."],
 };
 
-function createTaskSpec(
-  title: string,
-  id: string,
-  options: NewTaskOptions,
-  values: NewTaskSpecValues = defaultSpecValues,
-) {
-  const { type, domain, priority, goal } = options;
-  const goalValue = goal !== undefined
-    ? (() => {
-        const trimmed = goal.trim();
-        if (!trimmed) {
-          throw new TaskCreationError("Error: --goal value must not be empty.");
-        }
-        return trimmed;
-      })()
-    : "TODO: describe the goal of this task.";
-
-  return {
-    id,
+function writeTaskFile(title: string, options: NewTaskOptions, values: NewTaskSpecValues = defaultSpecValues): string {
+  const { cwd } = options;
+  const result = createTask({
     title,
-    status: "pending",
-    type,
-    domain,
-    priority,
-    depends_on: [] as string[],
-    allowed_paths: values.allowedPaths,
-    forbidden_paths: values.forbiddenPaths,
-    goal: goalValue,
-    acceptance_criteria: values.acceptanceCriteria,
-    implementation_notes: options.implementationNotes ?? values.implementationNotes,
-    verification: {
-      commands: values.verificationCommands,
-    },
-    outputs_required: values.outputsRequired,
+    type: options.type,
+    domain: options.domain,
+    priority: options.priority,
+    goal: options.goal,
+    implementationNotes: options.implementationNotes ?? values.implementationNotes,
+    acceptanceCriteria: values.acceptanceCriteria,
+    verificationCommands: values.verificationCommands,
+    allowedPaths: values.allowedPaths,
+    forbiddenPaths: values.forbiddenPaths,
+    outputsRequired: values.outputsRequired,
     notes: values.notes,
-  };
-}
+    activeDir: options.activeDir,
+  });
 
-function writeTaskFile(title: string, options: NewTaskOptions, values?: NewTaskSpecValues): string {
-  const { cwd, activeDir } = options;
-  const id = slugify(title);
-
-  if (!id) {
-    throw new TaskCreationError("Error: could not generate a valid id from the provided title.");
+  if (!result.ok) {
+    if (result.code === "duplicate" && result.existingPath) {
+      throw new TaskCreationError(`Error: task spec already exists at ${result.existingPath.replace(cwd + "/", "")}`);
+    }
+    const prefix = result.code === "invalid_type" || result.code === "invalid_priority" ? "" : "Error: ";
+    throw new TaskCreationError(`${prefix}${result.message}`);
   }
 
-  const filePath = join(activeDir, `${id}.yaml`);
-
-  if (existsSync(filePath)) {
-    throw new TaskCreationError(`Error: task spec already exists at ${filePath.replace(cwd + "/", "")}`);
-  }
-
-  if (!existsSync(activeDir)) {
-    mkdirSync(activeDir, { recursive: true });
-  }
-
-  const spec = createTaskSpec(title, id, {
-    ...options,
-    type: validateChoice(options.type, TASK_TYPES, "type"),
-    priority: validateChoice(options.priority, PRIORITIES, "priority"),
-  }, values);
-  const yaml = formatYamlDocument(spec);
-  writeFileSync(filePath, yaml, "utf-8");
-
-  console.log(`Created: ${filePath.replace(cwd + "/", "")}`);
+  console.log(`Created: ${result.filePath.replace(cwd + "/", "")}`);
   console.log(`\nNext steps:`);
-  console.log(`  1. Edit the spec: ${filePath.replace(cwd + "/", "")}`);
+  console.log(`  1. Edit the spec: ${result.filePath.replace(cwd + "/", "")}`);
   console.log(`  2. Run: manciple validate`);
-  console.log(`  3. Run: manciple compile ${id}`);
+  console.log(`  3. Run: manciple compile ${result.id}`);
 
-  return filePath;
-}
-
-function validateChoice<T extends readonly string[]>(value: string, allowed: T, label: string): T[number] {
-  if (allowed.includes(value)) {
-    return value as T[number];
-  }
-  throw new TaskCreationError(`Invalid ${label}: "${value}". Allowed: ${allowed.join(", ")}`);
+  return result.filePath;
 }
 
 async function askRequired(question: PromptQuestion, prompt: string): Promise<string> {
@@ -204,12 +156,13 @@ export async function newInteractiveCommand(
       notes: await askList(question, "Note", false),
     };
 
+    // type/priority are validated by the shared creation service at write time.
     return writeTaskFile(interactiveTitle, {
       ...options,
       goal,
-      type: validateChoice(typeValue, TASK_TYPES, "type"),
+      type: typeValue as TaskType,
       domain,
-      priority: validateChoice(priorityValue, PRIORITIES, "priority"),
+      priority: priorityValue as Priority,
     }, values);
   } catch (error) {
     if (error instanceof TaskCreationError) {
