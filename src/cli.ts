@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { createRequire } from "module";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { loadConfig } from "./config.js";
+import { packageVersion } from "./version.js";
 import { DEFAULT_ROOT } from "./constants.js";
 import { formatTaskCommand } from "./commands/formatTask.js";
 import { initCommand } from "./commands/init.js";
@@ -32,8 +32,6 @@ async function runCliAction(action: () => void | Promise<void>): Promise<void> {
   }
 }
 
-const require = createRequire(import.meta.url);
-const { version } = require("../package.json") as { version: string };
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const cwd = process.cwd();
@@ -52,7 +50,7 @@ function shouldLinkGlobalOnInit(): boolean {
 program
   .name("manciple")
   .description("A repo-native workflow layer for existing coding agents.")
-  .version(version);
+  .version(packageVersion);
 
 program.addHelpText("beforeAll", headerBanner());
 
@@ -63,14 +61,16 @@ program
   .option("--root <dir>", "Root directory for Manciple.", DEFAULT_ROOT)
   .option("--mcp", "Only set up MCP config (.mcp.json), skip directory creation and agents.", false)
   .option("--agents", "Only install packaged agent skills and agents, skip directory creation and MCP.", false)
+  .option("--global-mcp", "Also write the manciple MCP server to the user-global OpenCode config (~/.config/opencode/opencode.json). User-global configuration is never touched without this explicit flag.", false)
   .option("--verbose", "Show detailed per-directory and per-file output.", false)
-  .action(async (opts: { force: boolean; root: string; mcp: boolean; agents: boolean; verbose: boolean }) => {
+  .action(async (opts: { force: boolean; root: string; mcp: boolean; agents: boolean; globalMcp: boolean; verbose: boolean }) => {
     await initCommand({
       force: opts.force,
       cwd,
       root: opts.root,
       mcp: opts.mcp,
       agents: opts.agents,
+      globalMcp: opts.globalMcp,
       verbose: opts.verbose,
       globalLink: shouldLinkGlobalOnInit() ? { packageRoot } : undefined,
     });

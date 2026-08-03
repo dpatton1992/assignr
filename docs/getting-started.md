@@ -34,15 +34,31 @@ This one command does everything to set up the repo:
   OpenCode agents (`.opencode/agents/`) from the installed npm package into
   your repo root so agent harnesses can find them.
 
-Running `manciple init` again is safe — it skips anything already set up.
-Use `--force` to overwrite existing files.
+Every file a default `manciple init` writes is repo-local. It does not change
+user-global configuration — in particular it never edits the OpenCode global
+config at `~/.config/opencode/opencode.json`. To also write the MCP server into
+that user-global OpenCode config, pass the explicit opt-in flag:
+
+```bash
+manciple init --global-mcp
+```
+
+Focused setup flags skip the rest of the initialization:
+
+```bash
+manciple init --mcp        # only write .mcp.json
+manciple init --agents     # only install packaged agent skills and agents
+```
+
+Running `manciple init` again is safe and idempotent — it skips anything already
+set up. Use `--force` to overwrite existing files.
 
 ## Create And Handoff A Task
 
 Create a task with a clear title, type, domain, and priority:
 
 ```bash
-manciple new "Build login page" --type implementation --domain auth --priority high
+manciple task new "Build login page" --type implementation --domain auth --priority high
 manciple validate
 manciple status
 manciple handoff build-login-page

@@ -676,4 +676,32 @@ describe("listTasksForMcp", () => {
     expect(existsSync(join(targetRoot, ".manciple", "tasks", "active", "scoped-mcp-task.yaml"))).toBe(true);
     expect(existsSync(join(serverRoot, ".manciple", "tasks", "active", "scoped-mcp-task.yaml"))).toBe(false);
   });
+
+  it("reports the package.json version in the MCP initialize handshake (no stale hard-coded version)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "manciple-mcp-version-"));
+    tempDirs.push(root);
+
+    const tsxBin = join(
+      process.cwd(),
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "tsx.cmd" : "tsx"
+    );
+    const transport = new StdioClientTransport({
+      command: tsxBin,
+      args: [join(process.cwd(), "src", "mcp.ts")],
+      cwd: root,
+    });
+    const client = new Client({ name: "manciple-test", version: "0.0.0" });
+
+    await client.connect(transport);
+    const serverVersion = client.getServerVersion();
+    await client.close();
+
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf-8")) as {
+      version: string;
+    };
+    expect(serverVersion).toEqual({ name: "manciple", version: pkg.version });
+    expect(serverVersion?.version).not.toBe("0.1.0");
+  });
 });

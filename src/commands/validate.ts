@@ -85,7 +85,7 @@ export function validateCommand(
   }
 
   if (tasks.length === 0 && loadErrors.length === 0) {
-    console.warn(`  ${picocolors.yellow("⚠")} No tasks found. Run "manciple new" to create your first task.`);
+    console.warn(`  ${picocolors.yellow("⚠")} No tasks found. Run "manciple task new" to create your first task.`);
   }
 
   const result = validateTasks(tasks, {
