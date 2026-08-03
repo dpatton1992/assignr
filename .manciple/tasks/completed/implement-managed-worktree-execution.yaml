@@ -1,6 +1,6 @@
 id: implement-managed-worktree-execution
 title: Implement managed worktree execution
-status: needs_review
+status: complete
 type: implementation
 domain: core
 priority: high

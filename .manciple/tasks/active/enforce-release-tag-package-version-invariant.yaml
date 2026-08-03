@@ -6,6 +6,7 @@ domain: core
 priority: critical
 depends_on:
   - implement-managed-worktree-execution
+can_run_independently: true
 allowed_paths:
   - scripts/release.ts
   - scripts/checkReleaseTagVersion.ts

@@ -6,6 +6,7 @@ domain: core
 priority: high
 depends_on:
   - implement-managed-worktree-execution
+can_run_independently: true
 allowed_paths:
   - src/tasks/**
   - src/lifecycle/**
