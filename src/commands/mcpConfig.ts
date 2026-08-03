@@ -128,13 +128,16 @@ function setupLocalMcpConfig(cwd: string, force: boolean): void {
  * Init-friendly MCP setup — logs warnings instead of exiting on errors.
  * This is the version used by `manciple init`.
  *
- * Writes to:
- *   - OpenCode global config (~/.config/opencode/opencode.json)
- *   - Local .mcp.json (for Cline, Claude Desktop, etc.)
+ * By default it writes only the repository-local `.mcp.json`. The user-global
+ * OpenCode config (`~/.config/opencode/opencode.json`) is written only when
+ * `options.global` is explicitly set (e.g. `manciple init --global-mcp`), so
+ * default initialization never changes user-global configuration.
  */
-export function setupMcpConfig(cwd: string, force: boolean): void {
-  setupOpenCodeGlobalConfig(force);
+export function setupMcpConfig(cwd: string, force: boolean, options?: { global?: boolean }): void {
   setupLocalMcpConfig(cwd, force);
+  if (options?.global) {
+    setupOpenCodeGlobalConfig(force);
+  }
 }
 
 export function mcpConfigCommand(options: { cwd: string; force: boolean }): void {

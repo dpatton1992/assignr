@@ -10,8 +10,9 @@ this from your repo root to install them from the installed package:
 manciple install-assets
 ```
 
-Or use `manciple init --with-assets` to set up the Manciple structure and assets
-together. After installing, configure the Manciple MCP server for this repo.
+Or run `manciple init` (or `manciple init --agents` for assets only) to set up
+the Manciple structure and assets together. After installing, configure the
+Manciple MCP server for this repo.
 
 Two custom agents are defined in `.opencode/agents/`:
 

@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { packageVersion } from "./version.js";
 import { registerHandoffTools } from "./mcp/handoffTools.js";
 export { compileTaskForMcp } from "./mcp/handoffTools.js";
 import { registerOverviewTools } from "./mcp/overviewTools.js";
@@ -12,7 +13,7 @@ const mcpServerName = "manciple";
 
 const server = new McpServer({
   name: mcpServerName,
-  version: "0.1.0",
+  version: packageVersion,
 });
 
 registerOverviewTools(server);

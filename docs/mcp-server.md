@@ -11,6 +11,15 @@ agent client after writing `.mcp.json` so it loads the new server definition.
 
 The MCP binary is `manciple-mcp`.
 
+`mcp-config` only writes the repository-local `.mcp.json`. The server is also
+registered in the user-global OpenCode config at
+`~/.config/opencode/opencode.json` only when you explicitly opt in with
+`manciple init --global-mcp`; no init or MCP command touches user-global
+configuration by default.
+
+The MCP server reports the same version as the CLI, both sourced from
+`package.json` (`manciple --version` and the MCP `initialize` handshake agree).
+
 ## Tools
 
 The MCP surface mirrors the core workflow:

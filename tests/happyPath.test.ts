@@ -9,6 +9,17 @@ import { tmpdir } from "os";
 import { parse } from "yaml";
 import { spawnSync } from "child_process";
 
+const { homedirMock } = vi.hoisted(() => ({
+  homedirMock: { value: "/nonexistent/manciple-test-home" },
+}));
+
+// Point homedir at a controlled location so init scope tests can assert that
+// default init never writes the user-global OpenCode config.
+vi.mock("os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("os")>();
+  return { ...actual, homedir: () => homedirMock.value };
+});
+
 import { initCommand } from "../src/commands/init.js";
 import { newCommand, newInteractiveCommand } from "../src/commands/new.js";
 import { listCommand } from "../src/commands/list.js";
@@ -127,6 +138,99 @@ describe("manciple init", () => {
     await initCommand({ force: true, cwd, root: ".manciple" });
 
     expect(readFileSync(coreDomainPath, "utf-8")).toBe("id: core\nname: Custom Core\n");
+  });
+
+  it("is idempotent and never writes user-global OpenCode config by default", async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), "manciple-fake-home-"));
+    homedirMock.value = fakeHome;
+    try {
+      await initCommand({ force: false, cwd, root: ".manciple" });
+
+      // Repo-local .mcp.json is written by default init.
+      expect(existsSync(join(cwd, ".mcp.json"))).toBe(true);
+
+      // No user-global OpenCode config may be created by default init.
+      const globalConfig = join(fakeHome, ".config", "opencode", "opencode.json");
+      expect(existsSync(globalConfig)).toBe(false);
+
+      // Rerunning init stays idempotent and still does not touch user-global config.
+      await initCommand({ force: false, cwd, root: ".manciple" });
+      expect(existsSync(globalConfig)).toBe(false);
+    } finally {
+      homedirMock.value = "/nonexistent/manciple-test-home";
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it("writes the user-global OpenCode config only with the explicit --global-mcp flag", async () => {
+    const fakeHome = mkdtempSync(join(tmpdir(), "manciple-fake-home-"));
+    homedirMock.value = fakeHome;
+    try {
+      await initCommand({ force: false, cwd, root: ".manciple", globalMcp: true });
+
+      const globalConfig = join(fakeHome, ".config", "opencode", "opencode.json");
+      expect(existsSync(globalConfig)).toBe(true);
+      const config = JSON.parse(readFileSync(globalConfig, "utf-8")) as Record<string, unknown>;
+      expect((config.mcp as Record<string, unknown>)["manciple"]).toBeDefined();
+    } finally {
+      homedirMock.value = "/nonexistent/manciple-test-home";
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it("writes a commands README using Manciple names and the canonical workflow", async () => {
+    const readmePath = join(p.commands, "README.md");
+    expect(existsSync(readmePath)).toBe(true);
+
+    const content = readFileSync(readmePath, "utf-8");
+    expect(content).toContain("# Manciple Commands");
+    expect(content).toContain("manciple task new");
+    expect(content).toContain("manciple handoff my-task-title");
+    expect(content).toContain("manciple run-log my-task-title");
+    expect(content).toContain("manciple review my-task-title");
+    expect(content).not.toContain("assignr");
+    expect(content).not.toContain('manciple new "My task title"');
+  });
+});
+
+describe("command hints", () => {
+  it("newCommand recommends manciple handoff instead of the legacy compile alias", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    let output = "";
+    try {
+      newCommand("Hint task", {
+        type: "implementation",
+        domain: "core",
+        priority: "high",
+        cwd,
+        activeDir: p.tasksActive,
+      });
+      output = logSpy.mock.calls.flat().join("\n");
+    } finally {
+      logSpy.mockRestore();
+    }
+
+    expect(output).toContain("manciple handoff hint-task");
+    expect(output).not.toContain("manciple compile");
+  });
+
+  it("validateCommand empty-queue hint recommends manciple task new", () => {
+    const emptyDir = mkdtempSync(join(tmpdir(), "manciple-empty-"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((() => {}) as never));
+    let output = "";
+    try {
+      validateCommand(getPaths(emptyDir, ".manciple").specsTasks, emptyDir);
+      output = warnSpy.mock.calls.flat().join("\n");
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+      exitSpy.mockRestore();
+      rmSync(emptyDir, { recursive: true, force: true });
+    }
+
+    expect(output).toContain("manciple task new");
   });
 });
 

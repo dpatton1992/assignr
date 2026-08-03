@@ -39,7 +39,7 @@ The reviewer has to reconstruct the entire crime scene from a diff and a chat tr
 Manciple turns that blob into a repo-native work contract.
 
 ```bash
-manciple new "Fix password reset session handling" \
+manciple task new "Fix password reset session handling" \
   --type implementation \
   --domain auth \
   --priority high
@@ -208,14 +208,37 @@ manciple init
 
 ![manciple init output](docs/images/init-output.png)
 
+A default `manciple init` is repo-local and idempotent. It creates the
+`.manciple/` directory tree (config, lifecycle task directories, prompt and
+run-log folders), adds Manciple entries to `.gitignore`, writes `.mcp.json`
+with the Manciple MCP server for the repo, and copies the packaged agent
+skills (`.claude/skills/`, `.codex/skills/`) and OpenCode agents
+(`.opencode/agents/`) into the repo root. Everything it writes lives inside
+your repository — no user-global configuration is changed. Rerunning it is
+safe and skips anything already present.
+
+Focused setup flags:
+
+```bash
+manciple init --mcp        # only write .mcp.json (skip directory/agent setup)
+manciple init --agents     # only install packaged agent skills and agents
+manciple init --global-mcp # ALSO write the MCP server to the user-global
+                           # OpenCode config (~/.config/opencode/opencode.json).
+                           # This explicit opt-in is the only way init touches
+                           # user-global configuration.
+```
+
 Create a task:
 
 ```bash
-manciple new "Build login page" \
+manciple task new "Build login page" \
   --type implementation \
   --domain auth \
   --priority high
 ```
+
+(`manciple new` remains available as a legacy alias; run `manciple --help --all`
+to see every alias.)
 
 Validate your task specs:
 
@@ -308,8 +331,8 @@ outputs_required:
 
 | Command                                  | Purpose                                                    |
 | ---------------------------------------- | ---------------------------------------------------------- |
-| `manciple init`                          | Initialize `.manciple/` in a repo.                         |
-| `manciple new <title>`                   | Create a task spec. Use `--interactive` for guided setup.  |
+| `manciple init`                          | Initialize `.manciple/` in a repo (repo-local, idempotent). |
+| `manciple task new <title>`              | Create a task spec. Use `--interactive` for guided setup.  |
 | `manciple validate`                      | Validate task specs.                                       |
 | `manciple list`                          | List active tasks.                                         |
 | `manciple status`                        | Show status counts and a suggested next task.              |
@@ -323,6 +346,10 @@ outputs_required:
 | `manciple doctor`                        | Check repo configuration.                                  |
 | `manciple mcp-config`                    | Create or update `.mcp.json` for the Manciple MCP server.  |
 | `manciple migrate-assignr`               | Migrate existing `.assignr/` artifacts to Manciple.        |
+
+Legacy aliases (`manciple new`, `manciple compile`, and the others listed by
+`manciple --help --all`) remain functional and print a deprecation hint that
+names the canonical replacement.
 
 ---
 

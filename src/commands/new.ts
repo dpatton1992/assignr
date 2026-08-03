@@ -85,7 +85,7 @@ function writeTaskFile(title: string, options: NewTaskOptions, values: NewTaskSp
   console.log(`\nNext steps:`);
   console.log(`  1. Edit the spec: ${result.filePath.replace(cwd + "/", "")}`);
   console.log(`  2. Run: manciple validate`);
-  console.log(`  3. Run: manciple compile ${result.id}`);
+  console.log(`  3. Run: manciple handoff ${result.id}`);
 
   return result.filePath;
 }

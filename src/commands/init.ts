@@ -47,7 +47,7 @@ Run \`manciple --help\` to see all available commands.
 ## Workflow
 
 \`\`\`bash
-manciple new "My task title" --type implementation --domain core --priority high
+manciple task new "My task title" --type implementation --domain core --priority high
 manciple validate
 manciple handoff my-task-title
 # Run the generated prompt in your preferred coding agent
@@ -194,6 +194,7 @@ export async function initCommand(options: {
 	root: string;
 	mcp?: boolean;
 	agents?: boolean;
+	globalMcp?: boolean;
 	verbose?: boolean;
 	globalLink?: {
 		packageRoot: string;
@@ -201,8 +202,11 @@ export async function initCommand(options: {
 		confirmGlobalLink?: ConfirmGlobalLink;
 	};
 }): Promise<void> {
-	const { force, cwd, root, mcp = false, agents = false, verbose = false, globalLink } = options;
+	const { force, cwd, root, mcp = false, agents = false, globalMcp = false, verbose = false, globalLink } = options;
 	const runFullSetup = !mcp && !agents;
+	// MCP setup runs on full init, with --mcp, or whenever --global-mcp was
+	// passed explicitly (the global write is opt-in).
+	const runMcpSetup = mcp || runFullSetup || globalMcp;
 	const p = getPaths(cwd, root);
 
 	let dirs: string[] = [];
@@ -261,9 +265,11 @@ export async function initCommand(options: {
 		updateGitignore(cwd, root, true);
 	}
 
-	// MCP setup (quiet — output formatted later)
-	if (mcp || runFullSetup) {
-		runQuietly(() => setupMcpConfig(cwd, force));
+	// MCP setup (quiet — output formatted later). Default init writes only the
+	// repository-local .mcp.json; the user-global OpenCode config is written only
+	// when --global-mcp was passed explicitly.
+	if (runMcpSetup) {
+		runQuietly(() => setupMcpConfig(cwd, force, { global: globalMcp }));
 	}
 
 	// Agent assets install (quiet — output formatted later)
@@ -291,8 +297,11 @@ export async function initCommand(options: {
 	if (runFullSetup) {
 		console.log(`  ${picocolors.green('✓')} ${picocolors.bold('Repo structure created')}`);
 	}
-	if (mcp || runFullSetup) {
+	if (runMcpSetup) {
 		console.log(`  ${picocolors.green('✓')} ${picocolors.bold('MCP configured')}`);
+		if (globalMcp) {
+			console.log(`  ${picocolors.green('✓')} ${picocolors.bold('OpenCode global config updated')} ${picocolors.dim('(explicit --global-mcp)')}`);
+		}
 	}
 	if (agents || runFullSetup) {
 		console.log(`  ${picocolors.green('✓')} ${picocolors.bold('Agent skills installed')}`);
@@ -346,9 +355,9 @@ export async function initCommand(options: {
 			}
 		}
 
-		if (mcp || runFullSetup) {
+		if (runMcpSetup) {
 			console.log(`\n  ${sectionHeader('MCP Config')}`);
-			setupMcpConfig(cwd, force);
+			setupMcpConfig(cwd, force, { global: globalMcp });
 		}
 
 		if (agents || runFullSetup) {

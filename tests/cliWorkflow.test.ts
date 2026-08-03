@@ -730,3 +730,17 @@ describe("Legacy command deprecation", () => {
     expect(result.stdout).toBeDefined();
   });
 });
+
+// ── version parity ───────────────────────────────────────────────────────
+
+describe("CLI version parity", () => {
+  it("manciple --version reports the package.json version", () => {
+    const result = runCli(["--version"]);
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf-8")) as {
+      version: string;
+    };
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(pkg.version);
+  });
+});
