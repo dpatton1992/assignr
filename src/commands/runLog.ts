@@ -3,6 +3,7 @@ import { join, basename } from "path";
 import { spawnSync } from "child_process";
 import { loadTasks } from "../specs/loadTasks.js";
 import { findLatestRunLogPath, markRunLogSuperseded } from "../review/evidence.js";
+import { findManagedWorktreeByWorkspace } from "../worktrees/manager.js";
 
 export interface RunLogOptions {
   result?: string;
@@ -25,6 +26,37 @@ export interface RunLogOptions {
   notes?: string;
   /** Filename of the run log this one supersedes, if any. */
   supersedes?: string;
+  /** Managed-worktree base used to include already committed task changes. */
+  gitBaseSha?: string;
+  /** Git checkout used for evidence while durable state remains in the control repo. */
+  evidenceCwd?: string;
+}
+
+export interface RunLogEvidenceContext {
+  cwd: string;
+  baseSha?: string;
+}
+
+export function resolveRunLogEvidence(
+  taskId: string,
+  workspace: string | undefined,
+  options: {
+    controlRepo: string;
+    worktreesDir: string;
+    specsTasksDir: string;
+  },
+): RunLogEvidenceContext {
+  if (!workspace) return { cwd: options.controlRepo };
+
+  const record = findManagedWorktreeByWorkspace(workspace, {
+    controlRepo: options.controlRepo,
+    worktreesDir: options.worktreesDir,
+    specsTasksDir: options.specsTasksDir,
+  });
+  if (!record || record.taskId !== taskId) {
+    throw new Error(`Workspace is not the managed worktree for task ${taskId}: ${workspace}`);
+  }
+  return { cwd: record.workspacePath, baseSha: record.baseSha };
 }
 
 interface AutoDetectedFiles {
@@ -68,7 +100,27 @@ function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
 }
 
-export function detectChangedFiles(cwd: string): AutoDetectedFiles {
+export function detectChangedFiles(cwd: string, baseSha?: string): AutoDetectedFiles {
+  if (baseSha) {
+    const commands = [
+      ["diff", "--name-only", `${baseSha}...HEAD`],
+      ["diff", "--name-only"],
+      ["diff", "--cached", "--name-only"],
+      ["ls-files", "--others", "--exclude-standard"],
+    ];
+    const files = unique(commands.flatMap((args) => {
+      const result = spawnSync("git", args, { cwd, encoding: "utf-8" });
+      return result.status === 0 ? (result.stdout ?? "").split("\n") : [];
+    }));
+    return {
+      files,
+      source: `auto-detected from managed worktree diff since ${baseSha}`,
+      fallback: files.length > 0
+        ? ""
+        : `No changed files detected since managed worktree base ${baseSha}.`,
+    };
+  }
+
   const status = spawnSync("git", ["status", "--short", "--untracked-files=all"], {
     cwd,
     encoding: "utf-8",
@@ -127,7 +179,7 @@ export function buildRunLog(
   const promptPath = `${generatedDir}/${id}.md`;
   const branch = currentBranch(cwd);
   const finalStatus = options.taskStatus ?? status;
-  const detected = detectChangedFiles(cwd);
+  const detected = detectChangedFiles(cwd, options.gitBaseSha);
   const filesChanged = options.filesChanged?.length
     ? renderList(unique(options.filesChanged), "provided by user", "Unknown: no changed files were provided.")
     : renderList(detected.files, detected.source, detected.fallback);
@@ -291,7 +343,14 @@ export function runLogCommand(
     options = { ...options, supersedes: existingBasename };
   }
 
-  const content = buildRunLog(spec.title, spec.id, spec.status, generatedDir, cwd, options);
+  const content = buildRunLog(
+    spec.title,
+    spec.id,
+    spec.status,
+    generatedDir,
+    options.evidenceCwd ?? cwd,
+    options,
+  );
 
   writeFileSync(outPath, content, "utf-8");
   console.log(`Created run log: ${outPath.replace(cwd + "/", "")}`);

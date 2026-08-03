@@ -107,7 +107,7 @@ review-outcome receipt:
 
 | Decision | Command | Reason | Lifecycle effect |
 |---|---|---|---|
-| Approve | `manciple review approve <task-id>` | not required | `needs_review` → `complete` (moved to `tasks/completed/`) |
+| Approve | `manciple review approve <task-id>` | not required | Managed branch: gate, prospective verification, no-ff merge, then `needs_review` → `complete` and cleanup. Unmanaged task: lifecycle transition only. |
 | Request changes | `manciple review changes <task-id> --reason <text>` | required, nonblank | `needs_review` → `in_progress` |
 | Reject | TUI `x` / MCP `manciple_review_decision` | required, nonblank | `needs_review` → `failed` |
 | Block | `manciple review block <task-id> --reason <text>` | required, nonblank | `needs_review` → `blocked` |

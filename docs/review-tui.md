@@ -133,7 +133,7 @@ task, the current status, and the next status.
 
 | Decision | Key | Reason | Lifecycle effect |
 |---|---|---|---|
-| Approve | `a` | not required | `needs_review` → `complete`, moved to `tasks/completed/` |
+| Approve | `a` | not required | Managed branch: gate, prospective verification, no-ff merge, then `needs_review` → `complete` and cleanup. Unmanaged task: lifecycle transition only. |
 | Request changes | `e` | **required**, nonblank | `needs_review` → `in_progress` |
 | Reject | `x` | **required**, nonblank | `needs_review` → `failed` |
 | Block | — (no TUI key; use `manciple review block <task-id> --reason <text>` or MCP) | **required**, nonblank | `needs_review` → `blocked` |

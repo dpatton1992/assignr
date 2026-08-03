@@ -12,6 +12,7 @@ import {
 import { evaluateReviewReadiness } from "./readiness.js";
 import type { ReviewReadinessReport } from "./readiness.js";
 import { normalizePath, pathMatchesPattern } from "../utils/pathUtils.js";
+import { getManagedWorktree, isGitRepository } from "../worktrees/manager.js";
 
 export type DeterministicReviewBlockerKind =
   | "load-error"
@@ -195,7 +196,6 @@ export function evaluateDeterministicReviewGate(
     reason: `${issue.file}: ${issue.message}`,
   }));
   loadBlockers.push(...lifecycleBlockers);
-  const gitChangedFiles = readGitChangedFiles(options.cwd);
   const targets = tasks.filter((task) => (
     options.taskId
       ? task.spec.id === options.taskId
@@ -203,6 +203,20 @@ export function evaluateDeterministicReviewGate(
   ));
 
   const taskReports = targets.map((task) => {
+    let evidenceCwd = options.cwd;
+    let evidenceBaseSha: string | undefined;
+    if (isGitRepository(options.cwd)) {
+      const record = getManagedWorktree(task.spec.id, {
+        controlRepo: options.cwd,
+        worktreesDir: join(mancipleRootFrom(options.specsTasksDir), "worktrees"),
+        specsTasksDir: options.specsTasksDir,
+      });
+      if (record) {
+        evidenceCwd = record.workspacePath;
+        evidenceBaseSha = record.baseSha;
+      }
+    }
+    const gitChangedFiles = readGitChangedFiles(evidenceCwd, evidenceBaseSha);
     const runLogContent = readLatestRunLogContent(options.cwd, task.spec.id);
     const runLogs = parseRunLogEvidence(runLogContent);
     const readiness = evaluateReviewReadiness(task, { runLogs, gitChangedFiles });

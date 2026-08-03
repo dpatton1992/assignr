@@ -505,7 +505,7 @@ describe("listTasksForMcp", () => {
     await client.connect(transport);
     const result = await client.callTool({
       name: "manciple_dispatch_plan",
-      arguments: {},
+      arguments: { use_worktrees: false },
     });
     await client.close();
 

@@ -1,4 +1,5 @@
 import { spawnSync } from "child_process";
+import { basename, dirname, join, relative } from "path";
 import { loadTasks } from "../specs/loadTasks.js";
 import type { LoadedTaskWithTier, TaskTier } from "../specs/loadTasks.js";
 import type { TaskSpec } from "../specs/schema.js";
@@ -15,6 +16,8 @@ import {
 import { evaluateDeterministicReviewGate } from "./deterministicGate.js";
 import type { DeterministicReviewBlocker } from "./deterministicGate.js";
 import { pathMatchesPattern } from "../utils/pathUtils.js";
+import { getManagedWorktree, isGitRepository } from "../worktrees/manager.js";
+import type { ManagedWorktreeRecord } from "../worktrees/manager.js";
 
 /**
  * ReviewPacket is the read-only application boundary for review presentation.
@@ -111,6 +114,15 @@ export interface ReviewPacket {
   domain: string;
   priority: string;
   goal: string;
+  worktree: {
+    managed: boolean;
+    workspacePath: string;
+    branch?: string;
+    baseSha?: string;
+    headSha?: string;
+    claimState?: string;
+    dirty: boolean;
+  };
   claimedScope: {
     allowedPaths: string[];
     forbiddenPaths: string[];
@@ -339,8 +351,8 @@ function dependencyStatusesFor(spec: TaskSpec, allTasks: LoadedTaskWithTier[]): 
   });
 }
 
-function gitDiffLineStats(cwd: string): { insertions?: number; deletions?: number } {
-  const result = spawnSync("git", ["diff", "HEAD", "--numstat"], {
+function gitDiffLineStats(cwd: string, baseSha?: string): { insertions?: number; deletions?: number } {
+  const result = spawnSync("git", ["diff", baseSha ?? "HEAD", "--numstat"], {
     cwd,
     encoding: "utf8",
   });
@@ -359,6 +371,28 @@ function gitDiffLineStats(cwd: string): { insertions?: number; deletions?: numbe
   }
 
   return found ? { insertions, deletions } : {};
+}
+
+function mancipleRootFromSpecsTasks(specsTasksDir: string): string {
+  const last = basename(specsTasksDir);
+  const parent = dirname(specsTasksDir);
+  if (last === "tasks" && basename(parent) === "specs") return dirname(parent);
+  if (["active", "completed", "archived"].includes(last)) return dirname(parent);
+  return dirname(specsTasksDir);
+}
+
+function managedWorktreeFor(taskId: string, context: ReviewPacketContext): ManagedWorktreeRecord | undefined {
+  if (!isGitRepository(context.cwd)) return undefined;
+  return getManagedWorktree(taskId, {
+    controlRepo: context.cwd,
+    worktreesDir: join(mancipleRootFromSpecsTasks(context.specsTasksDir), "worktrees"),
+    specsTasksDir: context.specsTasksDir,
+  });
+}
+
+function gitHead(cwd: string): string | undefined {
+  const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" });
+  return result.status === 0 ? result.stdout.trim() : undefined;
 }
 
 function availableDecisionsFor(task: LoadedTaskWithTier): ReviewDecision[] {
@@ -396,7 +430,9 @@ export function getTaskReviewPacket(taskId: string, context: ReviewPacketContext
 
   const runLogContent = readLatestRunLogContent(context.cwd, taskId);
   const runLogs = parseRunLogEvidence(runLogContent);
-  const gitChangedFiles = readGitChangedFiles(context.cwd);
+  const worktree = managedWorktreeFor(taskId, context);
+  const evidenceCwd = worktree?.workspacePath ?? context.cwd;
+  const gitChangedFiles = readGitChangedFiles(evidenceCwd, worktree?.baseSha);
   const readiness = evaluateReviewReadiness(found, { runLogs, gitChangedFiles });
 
   const gate = evaluateDeterministicReviewGate({
@@ -425,6 +461,17 @@ export function getTaskReviewPacket(taskId: string, context: ReviewPacketContext
     domain: found.spec.domain,
     priority: found.spec.priority,
     goal: found.spec.goal,
+    worktree: {
+      managed: Boolean(worktree),
+      workspacePath: worktree ? relative(context.cwd, worktree.workspacePath).replace(/\\/g, "/") : ".",
+      ...(worktree ? {
+        branch: worktree.branch,
+        baseSha: worktree.baseSha,
+        headSha: gitHead(worktree.workspacePath),
+        claimState: worktree.claimState,
+      } : {}),
+      dirty: readGitChangedFiles(evidenceCwd).length > 0,
+    },
     claimedScope: {
       allowedPaths: found.spec.allowed_paths ?? [],
       forbiddenPaths: found.spec.forbidden_paths ?? [],
@@ -467,7 +514,7 @@ export function getTaskReviewPacket(taskId: string, context: ReviewPacketContext
     diffSummary: {
       changedFileCount: changedPaths.length,
       source,
-      ...gitDiffLineStats(context.cwd),
+      ...gitDiffLineStats(evidenceCwd, worktree?.baseSha),
     },
     availableDecisions: availableDecisionsFor(found),
     readiness,
@@ -477,7 +524,11 @@ export function getTaskReviewPacket(taskId: string, context: ReviewPacketContext
 export function getScopeDrift(taskId: string, context: ReviewPacketContext): ReviewScopeDriftReport {
   const found = findTaskOrThrow(taskId, context);
   const runLogs = parseRunLogEvidence(readLatestRunLogContent(context.cwd, taskId));
-  const gitChangedFiles = readGitChangedFiles(context.cwd);
+  const worktree = managedWorktreeFor(taskId, context);
+  const gitChangedFiles = readGitChangedFiles(
+    worktree?.workspacePath ?? context.cwd,
+    worktree?.baseSha,
+  );
   const { source } = changedPathsFor(runLogs, gitChangedFiles, found.spec);
 
   return {

@@ -54,6 +54,12 @@ Approve work that satisfies the task contract:
 manciple approve build-login-page
 ```
 
+For a managed worktree, approval first runs the deterministic gate, commits any
+remaining task changes, verifies a prospective no-ff merge in a temporary
+checkout, and integrates the branch. Only a successful integration records the
+approval and moves the task to completed. Failures retain the task workspace for
+inspection or rework.
+
 Return work that needs changes:
 
 ```bash

@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { STATUSES } from "../constants.js";
 import type { Status } from "../constants.js";
-import { runLogCommand } from "./runLog.js";
+import { resolveRunLogEvidence, runLogCommand } from "./runLog.js";
 import { setStatusCommand } from "./setStatus.js";
 import { completeCommand } from "./complete.js";
 import type { ManciplePaths } from "../utils/paths.js";
@@ -21,6 +21,25 @@ function parseNumberOption(value: string): number {
   return parsed;
 }
 
+function cliEvidenceOptions(
+  taskId: string,
+  workspace: string | undefined,
+  p: ManciplePaths,
+  cwd: string,
+): { evidenceCwd: string; gitBaseSha?: string } {
+  try {
+    const evidence = resolveRunLogEvidence(taskId, workspace, {
+      controlRepo: cwd,
+      worktreesDir: p.worktrees,
+      specsTasksDir: p.specsTasks,
+    });
+    return { evidenceCwd: evidence.cwd, gitBaseSha: evidence.baseSha };
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
+
 export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: string): void {
   program
     .command("submit <task-id>")
@@ -34,6 +53,7 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
     .option("--follow-up <text>", "Follow-up note. May be repeated.", collect, [])
     .option("--decision <text>", "Decision made. May be repeated.", collect, [])
     .option("--verify-receipt <text>", "Verification receipt.")
+    .option("--workspace <path>", "Registered managed worktree used for Git evidence auto-capture.")
     .option("--acceptance-evidence <evidence>", "Acceptance evidence as '<exact criterion text> => <evidence>'. May be repeated.", collect, [])
     .option("--risks <risks>", "Risks or residual concerns.")
     .option("--notes <notes>", "Free-form notes.")
@@ -47,6 +67,7 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
       followUp: string[];
       decision: string[];
       verifyReceipt?: string;
+      workspace?: string;
       acceptanceEvidence: string[];
       risks?: string;
       notes?: string;
@@ -80,6 +101,8 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
         process.exit(1);
       }
 
+      const evidence = cliEvidenceOptions(taskId, opts.workspace, p, cwd);
+
       // Create the run log
       runLogCommand(taskId, p.specsTasks, p.runs, p.promptsGenerated, cwd, {
         result,
@@ -94,6 +117,7 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
         acceptanceCriteriaEvidence: opts.acceptanceEvidence,
         verifyReceipt: opts.verifyReceipt,
         notes: opts.notes,
+        ...evidence,
       });
 
       // Update task status
@@ -133,6 +157,7 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
     .option("--files-changed <path>", "Changed file path. May be repeated; otherwise git status is used.", collect, [])
     .option("--acceptance-evidence <evidence>", "Acceptance evidence as '<exact criterion text> => <evidence>'. May be repeated.", collect, [])
     .option("--verify-receipt <receipt>", "Deterministic verify receipt text or compact JSON.")
+    .option("--workspace <path>", "Registered managed worktree used for Git evidence auto-capture.")
     .option("--decision <decision>", "Decision made during the run. May be repeated.", collect, [])
     .option("--follow-up <followUp>", "Follow-up task or note. May be repeated.", collect, [])
     .option("--risks <risks>", "Risks or residual concerns.")
@@ -155,6 +180,7 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
       filesChanged: string[];
       acceptanceEvidence: string[];
       verifyReceipt?: string;
+      workspace?: string;
       decision: string[];
       followUp: string[];
       risks?: string;
@@ -169,6 +195,7 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
         process.exit(1);
       }
 
+      const evidence = cliEvidenceOptions(taskId, opts.workspace, p, cwd);
       runLogCommand(taskId, p.specsTasks, p.runs, p.promptsGenerated, cwd, {
         result: opts.result,
         taskStatus: opts.taskStatus,
@@ -188,6 +215,7 @@ export function registerSubmitCommand(program: Command, p: ManciplePaths, cwd: s
         verifyReceipt: opts.verifyReceipt,
         risks: opts.risks,
         notes: opts.notes,
+        ...evidence,
       });
     });
 }

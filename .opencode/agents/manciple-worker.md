@@ -19,6 +19,9 @@ When invoked:
    workflow it defines exactly.
 2. If the user provided a task ID, use that. If not, call `manciple_dispatch_plan`
    to select an assignment.
+3. Call `manciple_prepare_worktree` before editing. Keep task state and run logs in
+   the returned `control_repo`; inspect, edit, and verify only in the returned
+   `workspace_path`. Never fall back to the control repo after preparation fails.
 
 Use Manciple MCP tools (`manciple_*`) as the primary interface. Prefer
 deterministic tool results over agent judgment.

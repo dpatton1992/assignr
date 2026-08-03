@@ -8,6 +8,9 @@ import type { TaskTier } from "../specs/loadTasks.js";
 import { formatYamlDocument } from "../utils/yamlFormat.js";
 import { colorForStatus } from "../utils/styling.js";
 import picocolors from "picocolors";
+import { loadConfig } from "../config.js";
+import { getPaths } from "../utils/paths.js";
+import { assertDirectCompletionAllowed, isGitRepository, setManagedWorktreeState } from "../worktrees/manager.js";
 
 const ACTIVE_STATUSES = new Set<Status>([
   "pending",
@@ -60,22 +63,67 @@ export function setStatusCommand(
   specsTasksDir: string,
   cwd: string
 ): void {
-  if (!STATUSES.includes(newStatus)) {
-    console.error(
-      `Invalid status: "${newStatus}". Allowed: ${STATUSES.join(", ")}`
+  try {
+    const config = loadConfig(cwd);
+    const paths = getPaths(cwd, config.root);
+    if (newStatus === "complete") {
+      assertDirectCompletionAllowed(taskId, {
+        controlRepo: cwd,
+        worktreesDir: paths.worktrees,
+        specsTasksDir,
+      });
+    }
+    const result = setTaskStatus(taskId, newStatus, specsTasksDir);
+    const worktreeState = newStatus === "needs_review"
+      ? "review_ready"
+      : newStatus === "in_progress"
+        ? "available"
+        : (["blocked", "partial", "failed"] as string[]).includes(newStatus)
+          ? "available"
+          : undefined;
+    if (worktreeState) {
+      if (isGitRepository(cwd)) {
+        setManagedWorktreeState(taskId, worktreeState, {
+          controlRepo: cwd,
+          worktreesDir: paths.worktrees,
+          specsTasksDir,
+        });
+      }
+    }
+    console.log(
+      `Updated: ${result.updatedPath.replace(cwd + "/", "")}\n` +
+        `  ${colorForStatus(result.previousStatus)(result.previousStatus)} ${picocolors.yellow("→")} ${colorForStatus(newStatus)(newStatus)}`
     );
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
+  }
+}
+
+export interface SetTaskStatusResult {
+  taskId: string;
+  previousStatus: string;
+  newStatus: Status;
+  updatedPath: string;
+}
+
+export function setTaskStatus(
+  taskId: string,
+  newStatus: Status,
+  specsTasksDir: string,
+): SetTaskStatusResult {
+  if (!STATUSES.includes(newStatus)) {
+    throw new Error(`Invalid status: "${newStatus}". Allowed: ${STATUSES.join(", ")}`);
   }
 
   const { tasks } = loadTasks(specsTasksDir, "all");
   const found = tasks.find((t) => t.spec.id === taskId);
 
   if (!found) {
-    console.error(
+    throw new Error(
       `Task not found: ${taskId}\n` +
         `Run "manciple list" to see available tasks.`
     );
-    process.exit(1);
   }
 
   const raw = readFileSync(found.filePath, "utf-8");
@@ -89,8 +137,7 @@ export function setStatusCommand(
   const shouldMove = found.tier !== destinationTier;
 
   if (shouldMove && existsSync(destination)) {
-    console.error(`Task ${taskId} already exists in ${destinationTier} tasks.`);
-    process.exit(1);
+    throw new Error(`Task ${taskId} already exists in ${destinationTier} tasks.`);
   }
 
   writeFileSync(found.filePath, formatYamlDocument(parsed), "utf-8");
@@ -101,8 +148,10 @@ export function setStatusCommand(
   }
 
   const updatedPath = shouldMove ? destination : found.filePath;
-  console.log(
-    `Updated: ${updatedPath.replace(cwd + "/", "")}\n` +
-      `  ${colorForStatus(String(previousStatus))(String(previousStatus))} ${picocolors.yellow("→")} ${colorForStatus(newStatus)(newStatus)}`
-  );
+  return {
+    taskId,
+    previousStatus: String(previousStatus),
+    newStatus,
+    updatedPath,
+  };
 }

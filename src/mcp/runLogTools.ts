@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { buildRunLog, timestamp } from "../commands/runLog.js";
+import { buildRunLog, resolveRunLogEvidence, timestamp } from "../commands/runLog.js";
 import { STATUSES } from "../constants.js";
 import { getRepoContext, repoInputSchema } from "./context.js";
 import { errorResult, jsonResult, toolResult } from "./results.js";
@@ -43,6 +43,7 @@ export function registerRunLogTools(server: McpServer): void {
           .describe("Outcome of the run."),
         risks: z.string().optional().describe("Risks or residual concerns from the run."),
         notes: z.string().optional().describe("Free-form notes about the run."),
+        workspace: z.string().optional().describe("Registered managed worktree used for git evidence auto-capture."),
       },
     },
     ({
@@ -61,12 +62,19 @@ export function registerRunLogTools(server: McpServer): void {
       result,
       risks,
       notes,
+      workspace,
     }) =>
       toolResult(() => {
         const ctx = getRepoContext(repo);
         const tasks = loadTasksOrError(ctx);
         const found = tasks.find((task) => task.spec.id === task_id);
         if (!found) return errorResult(`Task not found: ${task_id}`);
+
+        const evidence = resolveRunLogEvidence(task_id, workspace, {
+          controlRepo: ctx.cwd,
+          worktreesDir: ctx.paths.worktrees,
+          specsTasksDir: ctx.paths.specsTasks,
+        });
 
         if (!existsSync(ctx.paths.runs)) {
           mkdirSync(ctx.paths.runs, { recursive: true });
@@ -75,7 +83,7 @@ export function registerRunLogTools(server: McpServer): void {
         const outPath = join(ctx.paths.runs, `${timestamp()}-${found.spec.id}.md`);
         writeFileSync(
           outPath,
-          buildRunLog(found.spec.title, found.spec.id, found.spec.status, ctx.paths.promptsGenerated, ctx.cwd, {
+          buildRunLog(found.spec.title, found.spec.id, found.spec.status, ctx.paths.promptsGenerated, evidence.cwd, {
             agent,
             model,
             filesChanged: files_changed,
@@ -89,6 +97,7 @@ export function registerRunLogTools(server: McpServer): void {
             result,
             risks,
             notes,
+            gitBaseSha: evidence.baseSha,
           }),
           "utf-8"
         );

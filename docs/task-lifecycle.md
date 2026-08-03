@@ -36,6 +36,10 @@ Move accepted or finished active work to completed history:
 manciple complete build-login-page
 ```
 
+That direct command is for unmanaged, in-place tasks. A task with a registered
+managed worktree must use `manciple review approve <task-id>`; Manciple rejects
+direct completion so verification and branch integration cannot be skipped.
+
 Archive obsolete active work:
 
 ```bash

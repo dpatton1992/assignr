@@ -6,6 +6,7 @@ import { registerOverviewTools } from "./mcp/overviewTools.js";
 import { registerReviewTools } from "./mcp/reviewTools.js";
 import { registerRunLogTools } from "./mcp/runLogTools.js";
 import { registerTaskSpecTools } from "./mcp/taskSpecTools.js";
+import { registerWorktreeTools } from "./mcp/worktreeTools.js";
 
 const mcpServerName = "manciple";
 
@@ -19,6 +20,7 @@ registerTaskSpecTools(server);
 registerHandoffTools(server);
 registerRunLogTools(server);
 registerReviewTools(server);
+registerWorktreeTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

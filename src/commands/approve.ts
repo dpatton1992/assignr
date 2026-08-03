@@ -14,6 +14,12 @@ export function approveCommand(taskId: string, options: ReviewOutcomeCommandOpti
 
     console.log(`Recorded review outcome: ${result.outcomePath}`);
     console.log(`${picocolors.green("Approved:")} ${result.taskId} ${picocolors.yellow("→")} ${result.taskPath}`);
+    if (result.integration) {
+      console.log(`Integrated: ${result.integration.branch} → ${result.integration.integratedSha}`);
+    }
+    for (const warning of result.cleanupWarnings ?? []) {
+      console.warn(`Cleanup warning: ${warning}`);
+    }
   } catch (error) {
     if (error instanceof ReviewActionError) {
       console.error(error.message);

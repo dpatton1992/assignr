@@ -11,7 +11,7 @@ import { installAssetsCommand } from "./commands/installAssets.js";
 import { mcpConfigCommand } from "./commands/mcpConfig.js";
 import { migrateAssignrCommand } from "./commands/migrateAssignr.js";
 import { migrateTasksCommand } from "./commands/migrateTasks.js";
-import { worktreeCommand } from "./commands/worktree.js";
+import { normalizeLegacyWorktreeArgs, registerWorktreeCommands } from "./commands/worktree.js";
 import { registerCheckCommands } from "./commands/check.js";
 import { registerHandoffCommands } from "./commands/handoff.js";
 import { configureLegacyCommandCompatibility } from "./commands/legacy.js";
@@ -118,17 +118,7 @@ program
     await migrateAssignrCommand({ cwd, yes: opts.yes, dryRun: opts.dryRun });
   });
 
-program
-  .command("worktree <task-id>")
-  .description("Create or report a task-specific git worktree under .manciple/worktrees/.")
-  .option("--force", "Remove a non-empty existing path before creating the task worktree.", false)
-  .action((taskId: string, opts: { force: boolean }) => {
-    worktreeCommand(taskId, {
-      cwd,
-      worktreesDir: p.worktrees,
-      force: opts.force,
-    });
-  });
+registerWorktreeCommands(program, p, cwd);
 
 program
   .command("mcp-config")
@@ -144,5 +134,5 @@ registerSubmitCommand(program, p, cwd);
 registerReviewCommands(program, p, cwd);
 registerCheckCommands(program, p, cwd, root);
 
-const filteredArgv = configureLegacyCommandCompatibility(program, process.argv);
+const filteredArgv = normalizeLegacyWorktreeArgs(configureLegacyCommandCompatibility(program, process.argv));
 program.parse(filteredArgv);

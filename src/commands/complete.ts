@@ -5,6 +5,9 @@ import { loadTasks } from "../specs/loadTasks.js";
 import { formatYamlDocument } from "../utils/yamlFormat.js";
 import { colorForStatus } from "../utils/styling.js";
 import picocolors from "picocolors";
+import { loadConfig } from "../config.js";
+import { getPaths } from "../utils/paths.js";
+import { assertDirectCompletionAllowed } from "../worktrees/manager.js";
 
 export interface CompleteCommandOptions {
   specsTasksDir: string;
@@ -28,6 +31,18 @@ function moveTaskFile(source: string, destination: string): void {
 
 export function completeCommand(taskId: string, options: CompleteCommandOptions): void {
   const { specsTasksDir, completedDir, cwd } = options;
+  try {
+    const config = loadConfig(cwd);
+    const paths = getPaths(cwd, config.root);
+    assertDirectCompletionAllowed(taskId, {
+      controlRepo: cwd,
+      worktreesDir: paths.worktrees,
+      specsTasksDir,
+    });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
   const { tasks } = loadTasks(specsTasksDir, "active");
   const found = tasks.find((t) => t.spec.id === taskId);
 

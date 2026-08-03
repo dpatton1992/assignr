@@ -57,7 +57,11 @@ function printSection(label: string, rows: CoordinatorQueueRow[]): void {
   }
 }
 
-export function coordinatorCommand(specsTasksDir: string, _cwd: string): void {
+export function coordinatorCommand(
+  specsTasksDir: string,
+  _cwd: string,
+  options: { dependenciesRequireComplete?: boolean } = {},
+): void {
   const { tasks, errors } = loadTasks(specsTasksDir, "all");
 
   if (errors.length > 0) {
@@ -66,7 +70,7 @@ export function coordinatorCommand(specsTasksDir: string, _cwd: string): void {
     );
   }
 
-  const queue = buildCoordinatorQueue(tasks);
+  const queue = buildCoordinatorQueue(tasks, options);
   const sections: Array<[string, CoordinatorQueueRow[]]> = [
     ["runnable", queue.runnable],
     ["waiting", queue.waiting],

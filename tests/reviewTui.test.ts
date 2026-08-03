@@ -54,6 +54,7 @@ function makePacket(overrides: Partial<ReviewPacket> & { taskId: string }): Revi
     domain: "core",
     priority: "high",
     goal: "Deliver the feature.",
+    worktree: { managed: false, workspacePath: ".", dirty: true },
     claimedScope: { allowedPaths: ["src/**"], forbiddenPaths: ["dist/**"] },
     changedFilesSource: "run-log",
     changedPaths: [{ path: "src/example.ts", source: "run-log", inAllowedPaths: true, inForbiddenPaths: false }],
@@ -233,9 +234,9 @@ describe("resolvePagerCommand", () => {
 
 describe("buildDiffContent", () => {
   it("scopes git diff arguments to packet changed paths and surfaces untracked paths separately", () => {
-    const calls: Array<{ command: string; args: string[] }> = [];
-    const run: CommandRunner = (command, args) => {
-      calls.push({ command, args });
+    const calls: Array<{ command: string; args: string[]; cwd: string }> = [];
+    const run: CommandRunner = (command, args, cwd) => {
+      calls.push({ command, args, cwd });
       if (args[0] === "status") {
         return { status: 0, stdout: "?? src/new-file.ts\n", stderr: "" };
       }
@@ -263,9 +264,41 @@ describe("buildDiffContent", () => {
     ]);
     expect(calls[1].command).toBe("git");
     expect(calls[1].args).toEqual(["diff", "HEAD", "--", "src/example.ts", "src/other.ts"]);
+    expect(calls.every((call) => call.cwd === FAKE_CWD)).toBe(true);
     expect(content).toContain("Untracked paths");
     expect(content).toContain("src/new-file.ts");
     expect(content).toContain("diff --git");
+  });
+
+  it("reads managed worktree diffs from the workspace base SHA", () => {
+    const calls: Array<{ args: string[]; cwd: string }> = [];
+    const run: CommandRunner = (_command, args, cwd) => {
+      calls.push({ args, cwd });
+      return { status: 0, stdout: args[0] === "diff" ? "managed diff\n" : "", stderr: "" };
+    };
+    const packet = makePacket({
+      taskId: "alpha",
+      worktree: {
+        managed: true,
+        workspacePath: ".manciple/worktrees/alpha",
+        baseSha: "abc123",
+        dirty: false,
+      },
+    });
+
+    const content = buildDiffContent({ packet, cwd: FAKE_CWD, run });
+
+    expect(calls).toEqual([
+      {
+        args: ["status", "--porcelain", "--untracked-files=all", "--", "src/example.ts"],
+        cwd: "/tmp/fake-repo/.manciple/worktrees/alpha",
+      },
+      {
+        args: ["diff", "abc123", "--", "src/example.ts"],
+        cwd: "/tmp/fake-repo/.manciple/worktrees/alpha",
+      },
+    ]);
+    expect(content).toContain("managed diff");
   });
 
   it("reports a missing-diff message when git produces no output", () => {

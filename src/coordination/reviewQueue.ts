@@ -38,6 +38,17 @@ export interface DispatchPlanAssignment {
   task_id: string;
   ownership_boundary: DispatchPlanOwnershipBoundary;
   reason: string;
+  execution: DispatchPlanExecution;
+}
+
+export interface DispatchPlanExecution {
+  mode: "worktree" | "in_place";
+  control_repo: string;
+  workspace_path: string;
+  branch?: string;
+  base_sha?: string;
+  prepared: boolean;
+  claim_state?: string;
 }
 
 export interface DispatchPlanDeferral {
@@ -57,6 +68,7 @@ export interface DispatchPlanVerificationEntry {
 }
 
 export interface DispatchPlan {
+  execution_mode: "worktree" | "in_place";
   worker_cap: number;
   recommended_batch_size: number;
   assignments: DispatchPlanAssignment[];
@@ -66,6 +78,22 @@ export interface DispatchPlan {
     batch_commands: string[];
     assignments: DispatchPlanVerificationEntry[];
   };
+}
+
+export interface CoordinatorBuildOptions {
+  dependenciesRequireComplete?: boolean;
+}
+
+export interface DispatchPlanBuildOptions extends CoordinatorBuildOptions {
+  executionMode?: "worktree" | "in_place";
+  controlRepo?: string;
+  worktreesDir?: string;
+  preparedWorktrees?: Map<string, {
+    workspacePath: string;
+    branch: string;
+    baseSha: string;
+    claimState: string;
+  }>;
 }
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -166,8 +194,14 @@ function ownershipBoundary(task: LoadedTaskWithTier): DispatchPlanOwnershipBound
   };
 }
 
-function isDependencyUsable(task: LoadedTaskWithTier | undefined): boolean {
-  return Boolean(task && USABLE_DEP_STATUSES.has(task.spec.status));
+function isDependencyUsable(
+  task: LoadedTaskWithTier | undefined,
+  options: CoordinatorBuildOptions,
+): boolean {
+  if (!task) return false;
+  return options.dependenciesRequireComplete
+    ? task.spec.status === "complete"
+    : USABLE_DEP_STATUSES.has(task.spec.status);
 }
 
 function taskPaths(task: LoadedTaskWithTier): string[] {
@@ -230,11 +264,12 @@ function independenceConflictReason(task: LoadedTaskWithTier, others: LoadedTask
 
 function dependencyWaitReasons(
   task: LoadedTaskWithTier,
-  taskById: Map<string, LoadedTaskWithTier>
+  taskById: Map<string, LoadedTaskWithTier>,
+  options: CoordinatorBuildOptions,
 ): string[] {
   const reasons: string[] = [];
   const unresolvedDeps = (task.spec.depends_on ?? []).filter(
-    (dep) => !isDependencyUsable(taskById.get(dep))
+    (dep) => !isDependencyUsable(taskById.get(dep), options)
   );
 
   if (unresolvedDeps.length > 0) {
@@ -245,7 +280,7 @@ function dependencyWaitReasons(
     (other) =>
       other.spec.id !== task.spec.id &&
       other.tier === "active" &&
-      !isDependencyUsable(other) &&
+      !isDependencyUsable(other, options) &&
       (other.spec.blocks ?? []).includes(task.spec.id)
   );
 
@@ -259,9 +294,10 @@ function dependencyWaitReasons(
 function reviewNeedsReworkReason(
   task: LoadedTaskWithTier,
   activeWork: LoadedTaskWithTier[],
-  taskById: Map<string, LoadedTaskWithTier>
+  taskById: Map<string, LoadedTaskWithTier>,
+  options: CoordinatorBuildOptions,
 ): string {
-  const waitReasons = dependencyWaitReasons(task, taskById);
+  const waitReasons = dependencyWaitReasons(task, taskById, options);
   if (waitReasons.length > 0) return waitReasons.join("; ");
 
   const conflict = explicitConflictReason(task, activeWork);
@@ -270,7 +306,10 @@ function reviewNeedsReworkReason(
   return overlapReason(task, activeWork);
 }
 
-export function buildCoordinatorQueue(tasks: LoadedTaskWithTier[]): CoordinatorQueue {
+export function buildCoordinatorQueue(
+  tasks: LoadedTaskWithTier[],
+  options: CoordinatorBuildOptions = {},
+): CoordinatorQueue {
   const activeTasks = tasks.filter((task) => task.tier === "active");
   const taskById = new Map(tasks.map((task) => [task.spec.id, task]));
   const queue: CoordinatorQueue = {
@@ -302,7 +341,7 @@ export function buildCoordinatorQueue(tasks: LoadedTaskWithTier[]): CoordinatorQ
     }
 
     if (task.spec.status === "needs_review") {
-      const reason = reviewNeedsReworkReason(task, activeWork, taskById);
+      const reason = reviewNeedsReworkReason(task, activeWork, taskById, options);
       if (reason) {
         queue.reworkNeeded.push(row(task, "rework_needed", reason));
       } else {
@@ -315,7 +354,7 @@ export function buildCoordinatorQueue(tasks: LoadedTaskWithTier[]): CoordinatorQ
       continue;
     }
 
-    const waitReasons = dependencyWaitReasons(task, taskById);
+    const waitReasons = dependencyWaitReasons(task, taskById, options);
     if (waitReasons.length > 0) {
       queue.waiting.push(row(task, "waiting", waitReasons.join("; ")));
       continue;
@@ -352,23 +391,54 @@ export function buildCoordinatorQueue(tasks: LoadedTaskWithTier[]): CoordinatorQ
   return queue;
 }
 
-export function buildDispatchPlan(tasks: LoadedTaskWithTier[]): DispatchPlan {
-  const queue = buildCoordinatorQueue(tasks);
+export function buildDispatchPlan(
+  tasks: LoadedTaskWithTier[],
+  options: DispatchPlanBuildOptions = {},
+): DispatchPlan {
+  const executionMode = options.executionMode ?? "in_place";
+  const queue = buildCoordinatorQueue(tasks, options);
   const activeTaskById = new Map(
     tasks.filter((task) => task.tier === "active").map((task) => [task.spec.id, task])
   );
 
-  const assignments = queue.runnable.map((item) => {
+  const claimedDeferrals: DispatchPlanDeferral[] = [];
+  const assignments = queue.runnable.flatMap((item) => {
     const task = activeTaskById.get(item.id);
     if (!task) {
       throw new Error(`Runnable task missing from active task index: ${item.id}`);
     }
 
-    return {
+    const prepared = options.preparedWorktrees?.get(item.id);
+    if (executionMode === "worktree" && prepared && prepared.claimState !== "available") {
+      claimedDeferrals.push({
+        task_id: item.id,
+        section: "waiting",
+        reason: `managed worktree is ${prepared.claimState}; release or resume it before redispatch`,
+      });
+      return [];
+    }
+    const controlRepo = options.controlRepo ?? process.cwd();
+    const execution: DispatchPlanExecution = executionMode === "worktree"
+      ? {
+          mode: "worktree",
+          control_repo: controlRepo,
+          workspace_path: prepared?.workspacePath ?? `${options.worktreesDir ?? ".manciple/worktrees"}/${item.id}`,
+          branch: prepared?.branch ?? `manciple/${item.id}`,
+          ...(prepared ? { base_sha: prepared.baseSha, claim_state: prepared.claimState } : {}),
+          prepared: Boolean(prepared),
+        }
+      : {
+          mode: "in_place",
+          control_repo: controlRepo,
+          workspace_path: controlRepo,
+          prepared: true,
+        };
+    return [{
       task_id: item.id,
       ownership_boundary: ownershipBoundary(task),
       reason: item.reason,
-    };
+      execution,
+    }];
   });
 
   const deferredRows: Array<[Exclude<CoordinatorSection, "runnable">, CoordinatorQueueRow[]]> = [
@@ -385,7 +455,7 @@ export function buildDispatchPlan(tasks: LoadedTaskWithTier[]): DispatchPlan {
       section,
       reason: item.reason,
     }))
-  );
+  ).concat(claimedDeferrals);
 
   const verificationEntries = assignments.map((assignment) => {
     const task = activeTaskById.get(assignment.task_id);
@@ -400,6 +470,7 @@ export function buildDispatchPlan(tasks: LoadedTaskWithTier[]): DispatchPlan {
   );
 
   return {
+    execution_mode: executionMode,
     worker_cap: assignments.length,
     recommended_batch_size: assignments.length,
     assignments,

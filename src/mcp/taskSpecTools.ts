@@ -11,6 +11,8 @@ import { formatYamlDocument } from "../utils/yamlFormat.js";
 import { getRepoContext, repoInputSchema } from "./context.js";
 import { errorResult, jsonResult, toolResult } from "./results.js";
 import { findTask } from "./taskHelpers.js";
+import { setTaskStatus } from "../commands/setStatus.js";
+import { assertDirectCompletionAllowed, isGitRepository, setManagedWorktreeState } from "../worktrees/manager.js";
 
 export function registerTaskSpecTools(server: McpServer): void {
   server.registerTool(
@@ -143,16 +145,32 @@ export function registerTaskSpecTools(server: McpServer): void {
         const found = findTask(task_id, ctx);
         if (!found) return errorResult(`Task not found: ${task_id}`);
 
-        const raw = readFileSync(found.filePath, "utf-8");
-        const parsed = parse(raw) as Record<string, unknown>;
-        const previousStatus = parsed["status"];
-        parsed["status"] = status;
-        writeFileSync(found.filePath, formatYamlDocument(parsed), "utf-8");
+        if (status === "complete") {
+          assertDirectCompletionAllowed(task_id, {
+            controlRepo: ctx.cwd,
+            worktreesDir: ctx.paths.worktrees,
+            specsTasksDir: ctx.paths.specsTasks,
+          });
+        }
+
+        const result = setTaskStatus(task_id, status as Status, ctx.paths.specsTasks);
+        const claimState = status === "needs_review"
+          ? "review_ready"
+          : status === "in_progress" || status === "blocked" || status === "partial" || status === "failed"
+            ? "available"
+            : undefined;
+        if (claimState && isGitRepository(ctx.cwd)) {
+          setManagedWorktreeState(task_id, claimState, {
+            controlRepo: ctx.cwd,
+            worktreesDir: ctx.paths.worktrees,
+            specsTasksDir: ctx.paths.specsTasks,
+          });
+        }
 
         return jsonResult({
-          previous_status: previousStatus,
+          previous_status: result.previousStatus,
           new_status: status,
-          file: found.filePath,
+          file: result.updatedPath,
         });
       })
   );

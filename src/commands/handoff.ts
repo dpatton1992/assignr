@@ -7,6 +7,7 @@ import { coordinatorCommand } from "./coordinator.js";
 import { dispatchPlanCommand } from "./dispatchPlan.js";
 import { plannerContextCommand } from "./plannerContext.js";
 import type { ManciplePaths } from "../utils/paths.js";
+import { loadConfig } from "../config.js";
 
 export interface HandoffContext {
   cwd: string;
@@ -43,11 +44,12 @@ export function handoffCommand(
  * `manciple handoff queue` — coordinator queue
  * `manciple handoff queue --json` — dispatch plan JSON
  */
-export function handoffQueueCommand(ctx: HandoffContext & { json?: boolean }): void {
+export function handoffQueueCommand(ctx: HandoffContext & { json?: boolean; useWorktrees?: boolean }): void {
+  const useWorktrees = ctx.useWorktrees ?? loadConfig(ctx.cwd).worktrees.enabled;
   if (ctx.json) {
-    dispatchPlanCommand(ctx.specsTasksDir, ctx.cwd);
+    dispatchPlanCommand(ctx.specsTasksDir, ctx.cwd, { useWorktrees });
   } else {
-    coordinatorCommand(ctx.specsTasksDir, ctx.cwd);
+    coordinatorCommand(ctx.specsTasksDir, ctx.cwd, { dependenciesRequireComplete: useWorktrees });
   }
 }
 
@@ -82,13 +84,16 @@ export function registerHandoffCommands(program: Command, p: ManciplePaths, cwd:
     .command("queue")
     .description("Show runnable/deferred work (same as `manciple coordinator`). Use --json for dispatch plan (same as `manciple dispatch-plan`).")
     .option("--json", "Print deterministic dispatch packet JSON.", false)
-    .action((opts: { json: boolean }) => {
+    .option("--worktrees", "Use managed worktrees for this dispatch.")
+    .option("--no-worktrees", "Use in-place execution for this dispatch.")
+    .action((opts: { json: boolean; worktrees?: boolean }) => {
       handoffQueueCommand({
         cwd,
         specsTasksDir: p.specsTasks,
         tasksActiveDir: p.tasksActive,
         generatedDir: p.promptsGenerated,
         json: opts.json,
+        useWorktrees: opts.worktrees,
       });
     });
 
@@ -155,14 +160,19 @@ export function registerHandoffCommands(program: Command, p: ManciplePaths, cwd:
   program
     .command("coordinator")
     .description("Show the owner queue for runnable, waiting, review, complete-ready, blocked, and rework tasks.")
-    .action(() => {
-      coordinatorCommand(p.specsTasks, cwd);
+    .option("--worktrees", "Use managed-worktree dependency semantics.")
+    .option("--no-worktrees", "Use in-place dependency semantics.")
+    .action((opts: { worktrees?: boolean }) => {
+      const useWorktrees = opts.worktrees ?? loadConfig(cwd).worktrees.enabled;
+      coordinatorCommand(p.specsTasks, cwd, { dependenciesRequireComplete: useWorktrees });
     });
 
   program
     .command("dispatch-plan")
     .description("Print a deterministic coordinator dispatch packet as JSON.")
-    .action(() => {
-      dispatchPlanCommand(p.specsTasks, cwd);
+    .option("--worktrees", "Use managed worktrees for this dispatch.")
+    .option("--no-worktrees", "Use in-place execution for this dispatch.")
+    .action((opts: { worktrees?: boolean }) => {
+      dispatchPlanCommand(p.specsTasks, cwd, { useWorktrees: opts.worktrees });
     });
 }

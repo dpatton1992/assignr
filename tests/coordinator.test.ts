@@ -6,7 +6,7 @@ import { stringify } from "yaml";
 
 import { coordinatorCommand } from "../src/commands/coordinator.js";
 import { createDispatchPlan } from "../src/commands/dispatchPlan.js";
-import { buildCoordinatorQueue } from "../src/coordination/reviewQueue.js";
+import { buildCoordinatorQueue, buildDispatchPlan } from "../src/coordination/reviewQueue.js";
 import { initCommand } from "../src/commands/init.js";
 import { loadTasks } from "../src/specs/loadTasks.js";
 import { getPaths } from "../src/utils/paths.js";
@@ -191,7 +191,7 @@ describe("coordinator queue", () => {
       status: "needs_review",
     });
 
-    const plan = createDispatchPlan(p.specsTasks, cwd);
+    const plan = createDispatchPlan(p.specsTasks, cwd, { useWorktrees: false });
 
     expect(plan.worker_cap).toBe(1);
     expect(plan.recommended_batch_size).toBe(1);
@@ -206,6 +206,12 @@ describe("coordinator queue", () => {
           unsafe_parallel_areas: [],
         },
         reason: "dependencies usable; parallel-safe",
+        execution: {
+          mode: "in_place",
+          control_repo: cwd,
+          workspace_path: cwd,
+          prepared: true,
+        },
       },
     ]);
     expect(plan.do_not_dispatch).toEqual(
@@ -232,6 +238,37 @@ describe("coordinator queue", () => {
         },
       ],
     });
+  });
+
+  it("emits worktree execution metadata and requires dependencies to be integrated", () => {
+    writeTask("reviewed-dep", { status: "needs_review" });
+    writeTask("downstream", { depends_on: ["reviewed-dep"] });
+    writeTask("independent");
+    const { tasks } = loadTasks(p.specsTasks, "all");
+
+    const plan = buildDispatchPlan(tasks, {
+      executionMode: "worktree",
+      dependenciesRequireComplete: true,
+      controlRepo: cwd,
+      worktreesDir: p.worktrees,
+    });
+
+    expect(plan.execution_mode).toBe("worktree");
+    expect(plan.assignments).toContainEqual(expect.objectContaining({
+      task_id: "independent",
+      execution: {
+        mode: "worktree",
+        control_repo: cwd,
+        workspace_path: join(p.worktrees, "independent"),
+        branch: "manciple/independent",
+        prepared: false,
+      },
+    }));
+    expect(plan.do_not_dispatch).toContainEqual(expect.objectContaining({
+      task_id: "downstream",
+      section: "waiting",
+      reason: expect.stringContaining("waiting on dependencies: reviewed-dep"),
+    }));
   });
 
   it("keeps non-independent tasks as exclusive runnable slices", () => {

@@ -11,6 +11,7 @@ import { validateTasks } from "../specs/validateTasks.js";
 import { getRepoContext, repoInputSchema } from "./context.js";
 import type { McpRepoContext } from "./context.js";
 import { jsonResult, toolResult } from "./results.js";
+import { findManagedWorktreeByWorkspace } from "../worktrees/manager.js";
 
 function dependencyContextTask(task: LoadedTaskWithTier): LoadedTaskWithTier {
   return {
@@ -140,12 +141,15 @@ export function registerOverviewTools(server: McpServer): void {
       title: "Build Manciple Dispatch Plan",
       description:
         "Return a deterministic coordinator packet with assignments, deferrals, stop conditions, and verification commands.",
-      inputSchema: repoInputSchema,
+      inputSchema: {
+        ...repoInputSchema,
+        use_worktrees: z.boolean().optional().describe("Override worktrees.enabled for this dispatch only."),
+      },
     },
-    ({ repo }) =>
+    ({ repo, use_worktrees }) =>
       toolResult(() => {
         const ctx = getRepoContext(repo);
-        return jsonResult(createDispatchPlan(ctx.paths.specsTasks, ctx.cwd));
+        return jsonResult(createDispatchPlan(ctx.paths.specsTasks, ctx.cwd, { useWorktrees: use_worktrees }));
       })
   );
 
@@ -157,12 +161,23 @@ export function registerOverviewTools(server: McpServer): void {
       inputSchema: {
         ...repoInputSchema,
         profile: z.enum(VERIFY_PROFILE_NAMES),
+        workspace: z.string().optional().describe("Registered managed worktree in which verification should run."),
       },
     },
-    ({ repo, profile }) =>
+    ({ repo, profile, workspace }) =>
       toolResult(async () => {
         const ctx = getRepoContext(repo);
-        return jsonResult(await runVerifyProfile(parseVerifyProfile(profile), { cwd: ctx.cwd }));
+        let verificationCwd = ctx.cwd;
+        if (workspace) {
+          const record = findManagedWorktreeByWorkspace(workspace, {
+            controlRepo: ctx.cwd,
+            worktreesDir: ctx.paths.worktrees,
+            specsTasksDir: ctx.paths.specsTasks,
+          });
+          if (!record) throw new Error(`Workspace is not a registered Manciple worktree: ${workspace}`);
+          verificationCwd = record.workspacePath;
+        }
+        return jsonResult(await runVerifyProfile(parseVerifyProfile(profile), { cwd: verificationCwd }));
       })
   );
 }

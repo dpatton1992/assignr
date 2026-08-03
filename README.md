@@ -167,7 +167,21 @@ For the interactive review dashboard — queue triage, packet evidence, task gra
 
 Manciple is designed for running multiple agents without losing the plot.
 
-Use task specs, dependencies, path ownership, worktrees, run logs, and review queues to keep parallel work legible.
+Managed task worktrees are enabled by default. The primary checkout keeps task
+state and review evidence; each worker edits an isolated task branch. Approval
+prospectively merges and verifies that branch before integrating it into the
+primary checkout.
+
+```bash
+manciple task start build-login-page
+manciple worktree status build-login-page
+manciple review approve build-login-page
+```
+
+Set `worktrees.enabled: false` in `.manciple/config.yaml` or use
+`--no-worktrees` on automation commands to opt out. See
+[Parallel Workflows](docs/parallel-workflows.md) for lifecycle and recovery
+details.
 
 This is the difference between “I ran five agents” and “I can review what five agents did.”
 
@@ -305,6 +319,7 @@ outputs_required:
 | `manciple review`                       | Open the interactive review dashboard (TTY) or show help.  |
 | `manciple review <task-id>`              | Generate a reviewer prompt.                                |
 | `manciple review-check [task-id]`        | Check whether required review evidence exists.             |
+| `manciple worktree <command>`            | Create, inspect, release, remove, or prune task worktrees.  |
 | `manciple doctor`                        | Check repo configuration.                                  |
 | `manciple mcp-config`                    | Create or update `.mcp.json` for the Manciple MCP server.  |
 | `manciple migrate-assignr`               | Migrate existing `.assignr/` artifacts to Manciple.        |

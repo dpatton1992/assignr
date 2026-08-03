@@ -11,6 +11,9 @@ import { archiveCommand } from "./archive.js";
 import { reopenCommand } from "./reopen.js";
 import { loadTasks } from "../specs/loadTasks.js";
 import type { ManciplePaths } from "../utils/paths.js";
+import { loadConfig } from "../config.js";
+import { worktreeCommand } from "./worktree.js";
+import { assertInPlaceExecutionAllowed } from "../worktrees/manager.js";
 
 function collect(value: string, previous: string[]): string[] {
   previous.push(value);
@@ -121,8 +124,25 @@ export function registerTaskCommands(
   task
     .command("start <task-id>")
     .description("Start a task (set status to in_progress).")
-    .action((taskId: string) => {
-      setStatusCommand(taskId, "in_progress" as Status, p.specsTasks, cwd);
+    .option("--worktrees", "Create and use a managed task worktree.")
+    .option("--no-worktrees", "Run this task in the primary checkout.")
+    .action((taskId: string, opts: { worktrees?: boolean }) => {
+      try {
+        const useWorktrees = opts.worktrees ?? loadConfig(cwd).worktrees.enabled;
+        if (useWorktrees) {
+          worktreeCommand(taskId, { cwd, worktreesDir: p.worktrees, specsTasksDir: p.specsTasks });
+        } else {
+          assertInPlaceExecutionAllowed(taskId, {
+            controlRepo: cwd,
+            worktreesDir: p.worktrees,
+            specsTasksDir: p.specsTasks,
+          });
+          setStatusCommand(taskId, "in_progress" as Status, p.specsTasks, cwd);
+        }
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
     });
 
   // manciple task pause <task-id> --reason <text>
@@ -138,23 +158,41 @@ export function registerTaskCommands(
   task
     .command("resume <task-id>")
     .description("Resume a task (set status to pending, or reopen if archived/completed).")
-    .action((taskId: string) => {
-      const { tasks } = loadTasks(p.specsTasks, "all");
-      const found = tasks.find((t) => t.spec.id === taskId);
-      if (!found) {
-        console.error(`Task not found: ${taskId}`);
+    .option("--worktrees", "Create or reclaim the managed task worktree.")
+    .option("--no-worktrees", "Resume this task in the primary checkout.")
+    .action((taskId: string, opts: { worktrees?: boolean }) => {
+      try {
+        const useWorktrees = opts.worktrees ?? loadConfig(cwd).worktrees.enabled;
+        const { tasks } = loadTasks(p.specsTasks, "all");
+        const found = tasks.find((t) => t.spec.id === taskId);
+        if (!found) {
+          console.error(`Task not found: ${taskId}`);
+          process.exit(1);
+        }
+        if (!useWorktrees) {
+          assertInPlaceExecutionAllowed(taskId, {
+            controlRepo: cwd,
+            worktreesDir: p.worktrees,
+            specsTasksDir: p.specsTasks,
+          });
+        }
+        if (found.tier === "completed" || found.tier === "archived") {
+          reopenCommand(taskId, {
+            specsTasksDir: p.specsTasks,
+            activeDir: p.tasksActive,
+            cwd,
+          });
+        } else if (found.spec.status === "blocked") {
+          setStatusCommand(taskId, "pending" as Status, p.specsTasks, cwd);
+        } else {
+          setStatusCommand(taskId, "in_progress" as Status, p.specsTasks, cwd);
+        }
+        if (useWorktrees) {
+          worktreeCommand(taskId, { cwd, worktreesDir: p.worktrees, specsTasksDir: p.specsTasks });
+        }
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
         process.exit(1);
-      }
-      if (found.tier === "completed" || found.tier === "archived") {
-        reopenCommand(taskId, {
-          specsTasksDir: p.specsTasks,
-          activeDir: p.tasksActive,
-          cwd,
-        });
-      } else if (found.spec.status === "blocked") {
-        setStatusCommand(taskId, "pending" as Status, p.specsTasks, cwd);
-      } else {
-        setStatusCommand(taskId, "in_progress" as Status, p.specsTasks, cwd);
       }
     });
 

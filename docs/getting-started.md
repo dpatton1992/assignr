@@ -57,6 +57,18 @@ another coding agent. The prompt carries the task goal, allowed paths,
 acceptance criteria, verification commands, and evidence the agent should
 report.
 
+Managed worktrees are enabled by default. Starting a task prepares its isolated
+workspace and prints the path:
+
+```bash
+manciple task start build-login-page
+```
+
+The primary checkout remains the control plane for task state and run logs.
+Agents edit the prepared workspace. Set `worktrees.enabled: false` in
+`.manciple/config.yaml`, or use `manciple task start --no-worktrees`, to run
+in-place instead.
+
 ## Record Evidence
 
 After the implementation agent finishes, record what happened:

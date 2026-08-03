@@ -29,14 +29,25 @@ The MCP surface mirrors the core workflow:
 | `manciple_validate` | Validate task specs. |
 | `manciple_set_status` | Update task status. |
 | `manciple_run_log` | Create a run log. |
+| `manciple_prepare_worktree` | Start a task and create or claim its configured execution workspace. |
+| `manciple_get_worktree` | Return one managed task worktree record. |
+| `manciple_list_worktrees` | List managed worktree records and claim states. |
+| `manciple_release_worktree` | Release a claim for redispatch. |
+| `manciple_remove_worktree` | Remove a registered worktree and local task branch. |
+| `manciple_prune_worktrees` | Prune stale managed records and Git worktree metadata. |
 | `manciple_list_review_queue` | Return the assembled review queue summary (`needsReview`, `blocked`, `completed` buckets). |
 | `manciple_get_review_packet` | Return the assembled ReviewPacket for one task. |
 | `manciple_review_decision` | Record one review decision (approve, request_changes, reject, block, reopen). |
 
 Agent skills use `manciple_dispatch_plan` before spawning workers,
-`manciple_get_task_packet` before task edits, and `manciple_verify` for worker,
+`manciple_get_task_packet` before task edits, `manciple_prepare_worktree` before
+implementation, and `manciple_verify` for worker,
 coordinator, or review receipts. Use `manciple_format_task` with `check_only`
 when a task needs scoped YAML formatting evidence.
+
+For managed work, pass the primary checkout as `repo` and the prepared task
+workspace as `workspace` to `manciple_verify` and `manciple_run_log`. Approval
+then verifies a prospective no-ff merge and integrates it transactionally.
 
 The review tools (`manciple_list_review_queue`, `manciple_get_review_packet`,
 `manciple_review_decision`) are thin adapters over the same assembled
@@ -135,7 +146,7 @@ path when one is written) and applies the same lifecycle effects as the CLI:
 
 | Action | Reason | Lifecycle effect |
 |---|---|---|
-| `approve` | not required | `needs_review` → `complete` (moved to `tasks/completed/`) |
+| `approve` | not required | Managed worktrees are verified and no-ff merged, then `needs_review` → `complete`; unmanaged tasks retain the lifecycle-only behavior. |
 | `request_changes` | required, nonblank | `needs_review` → `in_progress` |
 | `reject` | required, nonblank | `needs_review` → `failed` |
 | `block` | required, nonblank | `needs_review` → `blocked` |

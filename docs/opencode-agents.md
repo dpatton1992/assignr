@@ -26,7 +26,7 @@ status.
 - **Invocation**: Use `@manciple-worker` with a task ID, or ask it to choose one.
 - **Workflow**: Calls the `skill` tool with `name: "manciple-mcp-task-runner"` to
   load the runner workflow at runtime. Uses Manciple MCP tools
-  (`manciple_get_task_packet`, `manciple_set_status`, `manciple_verify`,
+  (`manciple_get_task_packet`, `manciple_prepare_worktree`, `manciple_set_status`, `manciple_verify`,
   `manciple_run_log`) as the primary interface.
 
 ## `manciple-coordinator` (Primary Mode)
@@ -41,9 +41,10 @@ aggregates results.
   agent.
 - **Workflow**: Calls the `skill` tool with `name: "manciple-agents"` to load the
   coordination workflow. Uses `manciple_dispatch_plan` to determine task
-  assignments, spawns `manciple-worker` subagents in parallel (up to detected CPU
-  core count) via the `task` tool, then runs `manciple_verify` with
-  `profile: "coordinator"` after all workers complete.
+  assignments, prepares their isolated workspaces, spawns `manciple-worker`
+  subagents in parallel (up to detected CPU core count) via the `task` tool,
+  sends completed branches through review integration, then runs
+  `manciple_verify` with `profile: "coordinator"` against the control repo.
 
 ## MCP Server
 

@@ -32,11 +32,14 @@ The skills delegate routine scheduling and verification decisions to
 deterministic Manciple surfaces:
 
 - Coordinators call `manciple_dispatch_plan` or `manciple dispatch-plan` before
-  spawning workers, then spawn only the returned assignments.
+  spawning workers, then prepare and spawn only the returned assignments.
 - Workers start from `manciple_get_task_packet` or `manciple task-packet
-  <task-id>`, using full prompt compilation only when domain context is needed.
+  <task-id>`, then call `manciple_prepare_worktree` and edit only its returned
+  workspace, using full prompt compilation only when domain context is needed.
 - Workers and coordinators report receipts from `manciple_verify` or
   `manciple verify --profile worker|coordinator|review`.
+- Workers write status and run-log state against the returned control repo and
+  pass the workspace to verification and run-log tools for code evidence.
 - Scoped YAML checks use `manciple_format_task` or `manciple format-task
   <task-id> --check`; the skills do not run routine whole-repo formatting loops.
 

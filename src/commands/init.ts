@@ -22,6 +22,8 @@ import { installAssetsCommand } from './installAssets.js';
 
 const CONFIG_YAML = `# Manciple configuration
 root: .manciple
+worktrees:
+  enabled: true
 `;
 
 const STATE_JSON = JSON.stringify({ version: 1, tasks: [] }, null, 2);

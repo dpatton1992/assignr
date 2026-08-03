@@ -7,11 +7,15 @@ import {
   unlinkSync,
   writeFileSync,
 } from "fs";
-import { join } from "path";
+import { basename, dirname, join } from "path";
 import { parse } from "yaml";
 import { loadTasks } from "../specs/loadTasks.js";
 import type { LoadedTaskWithTier, TaskTier } from "../specs/loadTasks.js";
 import { formatYamlDocument } from "../utils/yamlFormat.js";
+import { evaluateDeterministicReviewGate } from "./deterministicGate.js";
+import { integrateManagedWorktree } from "../worktrees/integration.js";
+import { getManagedWorktree, isGitRepository, removeManagedWorktree, setManagedWorktreeState } from "../worktrees/manager.js";
+import type { WorktreeIntegrationResult } from "../worktrees/integration.js";
 
 /**
  * Shared durable review-outcome action layer.
@@ -42,6 +46,8 @@ export interface ReviewActionResult {
   outcomePath?: string;
   /** Repo-relative path to the task file after the action. */
   taskPath: string;
+  integration?: WorktreeIntegrationResult;
+  cleanupWarnings?: string[];
 }
 
 export class ReviewActionError extends Error {
@@ -148,12 +154,73 @@ function findActiveNeedsReviewTask(taskId: string, options: ReviewActionOptions)
   return found;
 }
 
+function worktreeOptionsFor(options: ReviewActionOptions): {
+  controlRepo: string;
+  worktreesDir: string;
+  specsTasksDir: string;
+} {
+  const tasksLast = basename(options.specsTasksDir);
+  const tasksParent = dirname(options.specsTasksDir);
+  const root = ["active", "completed", "archived"].includes(tasksLast)
+    ? dirname(tasksParent)
+    : tasksLast === "tasks" && basename(tasksParent) === "specs"
+      ? dirname(tasksParent)
+      : tasksLast === "tasks"
+        ? tasksParent
+        : dirname(options.specsTasksDir);
+  return {
+    controlRepo: options.cwd,
+    worktreesDir: join(root, "worktrees"),
+    specsTasksDir: options.specsTasksDir,
+  };
+}
+
+function updateManagedStateQuietly(
+  taskId: string,
+  state: "available" | "review_ready",
+  options: ReviewActionOptions,
+): void {
+  if (!isGitRepository(options.cwd)) return;
+  setManagedWorktreeState(taskId, state, worktreeOptionsFor(options));
+}
+
 export function approveTask(taskId: string, options: ReviewActionOptions): ReviewActionResult {
   if (!options.completedDir) {
     throw new ReviewActionError("error: approve requires a completed tasks directory.");
   }
 
   const found = findActiveNeedsReviewTask(taskId, options);
+  const worktreeOptions = worktreeOptionsFor(options);
+  const managed = isGitRepository(options.cwd)
+    ? Boolean(getManagedWorktree(taskId, worktreeOptions))
+    : false;
+  if (managed) {
+    const gate = evaluateDeterministicReviewGate({
+      specsTasksDir: options.specsTasksDir,
+      cwd: options.cwd,
+      taskId,
+      activeDir: options.activeDir,
+      completedDir: options.completedDir,
+      archivedDir: options.archivedDir,
+    });
+    const blockers = [
+      ...gate.loadBlockers,
+      ...gate.taskReports.flatMap((report) => report.blockers),
+    ];
+    if (blockers.length > 0) {
+      throw new ReviewActionError(
+        `Managed worktree approval failed deterministic review: ${blockers.map((blocker) => blocker.reason).join("; ")}`,
+      );
+    }
+  }
+  let integration: WorktreeIntegrationResult | undefined;
+  if (managed) {
+    try {
+      integration = integrateManagedWorktree(found.spec, worktreeOptions);
+    } catch (error) {
+      throw new ReviewActionError(error instanceof Error ? error.message : String(error));
+    }
+  }
   const destination = join(options.completedDir, `${taskId}.yaml`);
 
   if (existsSync(destination)) {
@@ -161,10 +228,27 @@ export function approveTask(taskId: string, options: ReviewActionOptions): Revie
   }
 
   const runsDir = requireRunsDir(options);
-  const outcomePath = writeReviewOutcome(found, runsDir, options.cwd, "approved", "complete");
+  const outcomePath = writeReviewOutcome(
+    found,
+    runsDir,
+    options.cwd,
+    "approved",
+    "complete",
+    integration ? `Integrated ${integration.branch} at ${integration.integratedSha}.` : undefined,
+  );
   mkdirSync(options.completedDir, { recursive: true });
   updateTaskStatus(found.filePath, "complete");
   moveTaskFile(found.filePath, destination);
+
+  const cleanupWarnings: string[] = [];
+  if (integration) {
+    try {
+      removeManagedWorktree(taskId, { ...worktreeOptions, deleteBranch: true });
+    } catch (error) {
+      cleanupWarnings.push(error instanceof Error ? error.message : String(error));
+      setManagedWorktreeState(taskId, "integrated_pending_completion", worktreeOptions, integration.integratedSha);
+    }
+  }
 
   return {
     taskId,
@@ -173,6 +257,8 @@ export function approveTask(taskId: string, options: ReviewActionOptions): Revie
     nextStatus: "complete",
     outcomePath: rel(options.cwd, outcomePath),
     taskPath: rel(options.cwd, destination),
+    ...(integration ? { integration } : {}),
+    ...(cleanupWarnings.length > 0 ? { cleanupWarnings } : {}),
   };
 }
 
@@ -193,6 +279,7 @@ export function requestChanges(
     reason
   );
   updateTaskStatus(found.filePath, "in_progress");
+  updateManagedStateQuietly(taskId, "available", options);
 
   return {
     taskId,
@@ -210,6 +297,7 @@ export function rejectTask(taskId: string, reason: string, options: ReviewAction
   const runsDir = requireRunsDir(options);
   const outcomePath = writeReviewOutcome(found, runsDir, options.cwd, "rejected", "failed", reason);
   updateTaskStatus(found.filePath, "failed");
+  updateManagedStateQuietly(taskId, "available", options);
 
   return {
     taskId,
@@ -231,6 +319,7 @@ export function blockReview(
   const runsDir = requireRunsDir(options);
   const outcomePath = writeReviewOutcome(found, runsDir, options.cwd, "blocked", "blocked", reason);
   updateTaskStatus(found.filePath, "blocked");
+  updateManagedStateQuietly(taskId, "available", options);
 
   return {
     taskId,

@@ -134,16 +134,27 @@ export function readLatestRunLogContent(cwd: string, taskId: string): string | u
   return readFileSync(latestPath, "utf-8").trim();
 }
 
-export function readGitChangedFiles(cwd: string): string[] {
+function commandLines(cwd: string, args: string[]): string[] {
+  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  if (result.error || result.status !== 0) return [];
+  return result.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+export function readGitChangedFiles(cwd: string, baseSha?: string): string[] {
+  if (baseSha) {
+    return [...new Set([
+      ...commandLines(cwd, ["diff", "--name-only", `${baseSha}...HEAD`]),
+      ...commandLines(cwd, ["diff", "--name-only"]),
+      ...commandLines(cwd, ["diff", "--cached", "--name-only"]),
+      ...commandLines(cwd, ["ls-files", "--others", "--exclude-standard"]),
+    ])].sort();
+  }
+
   const result = spawnSync("git", ["status", "--short", "--untracked-files=all"], {
     cwd,
     encoding: "utf8",
   });
-
-  if (result.error || result.status !== 0) {
-    return [];
-  }
-
+  if (result.error || result.status !== 0) return [];
   return result.stdout
     .split("\n")
     .map((line) => line.trimEnd())

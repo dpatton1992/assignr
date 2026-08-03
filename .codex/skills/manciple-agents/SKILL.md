@@ -33,24 +33,25 @@ If that path does not exist, use the discovered `manciple-mcp-task-runner` skill
 
 3. Spawn the returned batch of `worker` agents in parallel.
    - Cap the batch at the smaller of the detected worker cap and the number of assignments returned by the dispatch plan.
+   - Before spawning each worktree-mode assignment, call `manciple_prepare_worktree` with the control repo and task id. Use its returned `control_repo`, `workspace_path`, and `mode` in the worker prompt. If preparation fails, do not spawn that worker and do not fall back to the control repo. Release successfully prepared claims if the batch cannot be launched.
    - Use `worker` role. Do NOT use a full-history fork; embed all required context directly in each worker prompt.
-   - When Assignr MCP tools are available, include only the repo absolute path, skill file path, assigned task id, ownership boundary from the dispatch plan, and any dispatch-plan notes. Tell the worker to load compact task context with `manciple_get_task_packet` before editing.
+   - When Manciple MCP tools are available, include only the control repo, workspace path, execution mode, skill file path, assigned task id, ownership boundary from the dispatch plan, and any dispatch-plan notes. Tell the worker to load compact task context with `manciple_get_task_packet` before editing.
    - When MCP tools are unavailable, include the compact packet from `manciple task-packet <task-id>` plus the dispatch-plan notes.
    - Pass the `manciple-mcp-task-runner` skill as a skill item to each worker.
    - Tell workers they are not alone in the codebase, not to revert edits made by others, and to respect `allowed_paths`, `forbidden_paths`, and task spec write rules.
-   - Tell workers to create their own Assignr run logs and status transitions.
+   - Tell workers to create their own Manciple run logs and status transitions against the control repo while editing only the workspace path.
 
 4. Continue coordinator work while workers run.
    - Inspect broad repo state, likely conflict zones, or verification setup.
    - Do not duplicate assigned worker implementation.
 
-5. Integrate each completed batch.
+5. Review each completed batch.
    - Wait for all workers in the batch before refreshing task state unless a worker failure blocks the run.
    - Review each worker's final report, changed files, status, run log evidence, and verification receipt.
-   - Resolve conflicts only within the relevant task scope.
-   - Verify the integrated batch with `manciple_verify` using profile `coordinator` when MCP tools are available, or `manciple verify --profile coordinator` from the CLI. Report the returned receipt.
+   - Do not merge task branches directly. Submit `needs_review` tasks through Manciple review; approval performs the task gate, prospective verification, no-ff integration, completion transition, and successful cleanup transactionally.
+   - After approvals integrate the batch, verify the control repo with `manciple_verify` using profile `coordinator` when MCP tools are available, or `manciple verify --profile coordinator` from the CLI. Report the returned receipt.
    - Run `manciple_check_lifecycle` when MCP tools are available, or `manciple check-lifecycle` from the CLI. If lifecycle placement issues are reported, move only misplaced task YAML files to the directory matching their status and re-run the lifecycle check.
-   - Validate Assignr metadata with `manciple_validate` when MCP tools are available.
+   - Validate Manciple metadata with `manciple_validate` when MCP tools are available.
    - Get a fresh dispatch plan before starting any later batch. Stop when the plan returns no assignments or reports a stop condition.
 
 6. Report the run.
@@ -67,9 +68,11 @@ Use this shape for every worker. Fill in ALL bracketed values before spawning; w
 ```text
 Use the manciple-mcp-task-runner skill at [ABSOLUTE skill path, e.g. /Users/danielpatton/Documents/GitHub/promptops/.codex/skills/manciple-mcp-task-runner/SKILL.md] for this assignment.
 
-Repo root: [ABSOLUTE path to repo root, e.g. /Users/danielpatton/Documents/GitHub/promptops]
+Control repo: [ABSOLUTE primary checkout path]
+Workspace path: [ABSOLUTE path returned by manciple_prepare_worktree]
+Execution mode: [worktree/in_place]
 
-You are Worker [NUMBER] of [TOTAL_WORKERS_THIS_BATCH] in an Assignr dispatch-plan batch. The coordinator used CPU capacity as a ceiling, but this assignment comes from manciple_dispatch_plan / manciple dispatch-plan. You are not alone in the codebase. Do not revert edits made by others; adapt to existing changes and keep your edits narrowly scoped.
+You are Worker [NUMBER] of [TOTAL_WORKERS_THIS_BATCH] in a Manciple dispatch-plan batch. The coordinator used CPU capacity as a ceiling, but this assignment comes from manciple_dispatch_plan / manciple dispatch-plan. You are not alone in the codebase. Do not revert edits made by others; adapt to existing changes and keep your edits narrowly scoped.
 
 Assigned task or responsibility:
 [task id or sidecar responsibility from the dispatch plan]
@@ -79,18 +82,20 @@ Ownership boundary:
 
 Task context:
 - MCP tools available: [yes/no]
+- Execution mode: [worktree/in_place]
 - Dispatch-plan notes: [minimal notes from the assignment, deferral, or stop-condition context]
 - If yes: task id is the contract; load compact task context with manciple_get_task_packet before editing.
 - If no: run manciple task-packet <task-id> before editing, or use this embedded compact packet: [packet]
 
 Instructions:
-- Use Assignr MCP tools or CLI commands as the source of truth.
+- Use Manciple MCP tools or CLI commands as the source of truth.
+- Use the control repo for task packets, status, run logs, and review state. Inspect, edit, and run implementation commands only in the workspace path.
 - If assigned a task id, load compact context first, set it in_progress if needed, and obey allowed_paths, forbidden_paths, acceptance_criteria, verification.commands, and outputs_required.
 - Compile the full prompt only when the compact packet is insufficient and domain context is explicitly needed.
 - Do not edit files under .manciple/specs/tasks directly. Only status updates through manciple_set_status are allowed.
 - Verify with manciple_verify profile worker or manciple verify --profile worker and report the returned receipt as the primary verification evidence.
 - Use manciple_format_task or manciple format-task <task-id> --check only when scoped task YAML formatting evidence is needed.
-- Create the Assignr run log with final task status, files changed, non-test commands, tests, acceptance evidence, risks, and the deterministic verify receipt; then set final task status according to manciple-mcp-task-runner.
+- Create the Manciple run log against the control repo with workspace evidence, final task status, files changed, non-test commands, tests, acceptance evidence, risks, and the deterministic verify receipt; then set final task status according to manciple-mcp-task-runner.
 - For completed implementation work that changed behavior, include Decisions Made; omit it only when blocked before meaningful changes.
 - In your final response, report task id, final status, files changed, verification receipt, risks, blockers, and follow-ups.
 ```

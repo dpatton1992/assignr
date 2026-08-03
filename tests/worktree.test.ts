@@ -1,200 +1,218 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { execFileSync, spawnSync } from "child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-
-import { worktreeCommand } from "../src/commands/worktree.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  normalizeLegacyWorktreeArgs,
+  worktreeCommand,
+} from "../src/commands/worktree.js";
+import {
+  getManagedWorktree,
+  listManagedWorktrees,
+  removeManagedWorktree,
+} from "../src/worktrees/manager.js";
 import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
+const projectRoot = process.cwd();
+
+function git(args: string[], repo: string = cwd): string {
+  return execFileSync("git", args, { cwd: repo, encoding: "utf-8" }).trim();
+}
+
+function taskYaml(id: string): string {
+  return `id: ${id}
+title: Extract auth middleware
+status: pending
+type: implementation
+domain: core
+priority: medium
+depends_on: []
+blocks: []
+conflicts_with: []
+can_run_independently: true
+allowed_paths:
+  - src/**
+forbidden_paths: []
+path_ownership:
+  touched_paths: []
+  locked_paths: []
+  unsafe_parallel_areas: []
+goal: Extract auth middleware.
+acceptance_criteria:
+  - Middleware is extracted.
+verification:
+  commands:
+    - test -d src
+outputs_required:
+  - files_changed
+  - tests_run
+  - risks
+notes: []
+`;
+}
 
 beforeEach(() => {
   cwd = mkdtempSync(join(tmpdir(), "manciple-worktree-"));
   p = getPaths(cwd, ".manciple");
+  git(["init", "-b", "main"]);
+  git(["config", "user.email", "tests@example.com"]);
+  git(["config", "user.name", "Manciple Tests"]);
+  mkdirSync(p.tasksActive, { recursive: true });
+  mkdirSync(join(cwd, "src"), { recursive: true });
+  writeFileSync(join(cwd, "src", "index.ts"), "export {};\n", "utf-8");
+  writeFileSync(join(p.tasksActive, "extract-auth-middleware.yaml"), taskYaml("extract-auth-middleware"), "utf-8");
+  writeFileSync(p.config, "root: .manciple\nworktrees:\n  enabled: true\n", "utf-8");
+  git(["add", "."]);
+  git(["commit", "-m", "initial"]);
 });
 
 afterEach(() => {
   rmSync(cwd, { recursive: true, force: true });
 });
 
-function mockExit(): ReturnType<typeof vi.spyOn> {
-  return vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
-    throw new Error(`process.exit(${code})`);
-  }) as never);
+function commandOptions() {
+  return { cwd, worktreesDir: p.worktrees, specsTasksDir: p.specsTasks };
+}
+
+function runCli(args: string[]) {
+  return spawnSync(join(projectRoot, "node_modules", ".bin", "tsx"), [join(projectRoot, "src", "cli.ts"), ...args], {
+    cwd,
+    encoding: "utf-8",
+  });
 }
 
 describe("manciple worktree", () => {
-  it("constructs a task-specific branch and default worktree path", () => {
-    const calls: Array<{ args: string[]; cwd?: string }> = [];
-    const runner = vi.fn((args: string[], options?: { cwd?: string }) => {
-      calls.push({ args, cwd: options?.cwd });
-      if (args.join(" ") === "rev-parse --show-toplevel") {
-        return cwd;
-      }
-      return "";
-    });
+  it("creates a registered task branch and worktree from primary HEAD", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-
     try {
-      worktreeCommand("extract-auth-middleware", {
-        cwd,
+      const record = worktreeCommand("extract-auth-middleware", commandOptions());
+      expect(record.branch).toBe("manciple/extract-auth-middleware");
+      expect(record.workspacePath).toBe(join(realpathSync(cwd), ".manciple", "worktrees", "extract-auth-middleware"));
+      expect(record.claimState).toBe("assigned");
+      expect(git(["branch", "--show-current"], record.workspacePath)).toBe(record.branch);
+      expect(listManagedWorktrees({
+        controlRepo: cwd,
         worktreesDir: p.worktrees,
-        runner,
-      });
-
-      expect(calls).toEqual([
-        { args: ["rev-parse", "--show-toplevel"], cwd },
-        {
-          args: [
-            "worktree",
-            "add",
-            "-b",
-            "manciple/extract-auth-middleware",
-            join(p.worktrees, "extract-auth-middleware"),
-            "HEAD",
-          ],
-          cwd,
-        },
-      ]);
-
-      const output = logSpy.mock.calls.flat().join("\n");
-      expect(output).toContain("Worktree created: .manciple/worktrees/extract-auth-middleware");
-      expect(output).toContain("Branch: manciple/extract-auth-middleware");
+        specsTasksDir: p.specsTasks,
+      })).toHaveLength(1);
     } finally {
       logSpy.mockRestore();
     }
   });
 
-  it("reports an existing matching worktree without creating a new one", () => {
-    const worktreePath = join(p.worktrees, "extract-auth-middleware");
-    mkdirSync(worktreePath, { recursive: true });
-    writeFileSync(join(worktreePath, "README.md"), "existing worktree\n", "utf-8");
-
-    const runner = vi.fn((args: string[], options?: { cwd?: string }) => {
-      if (args.join(" ") === "rev-parse --show-toplevel" && options?.cwd === cwd) {
-        return cwd;
-      }
-      if (args[0] === "-C" && args[1] === worktreePath && args[2] === "rev-parse") {
-        return "true";
-      }
-      if (args[0] === "-C" && args[1] === worktreePath && args[2] === "branch") {
-        return "manciple/extract-auth-middleware";
-      }
-      return "";
-    });
+  it("reuses and reclaims an existing matching managed worktree", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-
     try {
-      worktreeCommand("extract-auth-middleware", {
-        cwd,
-        worktreesDir: p.worktrees,
-        runner,
-      });
-
-      expect(runner).not.toHaveBeenCalledWith(
-        ["worktree", "add", "-b", expect.any(String), expect.any(String), "HEAD"],
-        expect.any(Object),
-      );
-
-      const output = logSpy.mock.calls.flat().join("\n");
-      expect(output).toContain("Worktree already exists: .manciple/worktrees/extract-auth-middleware");
-      expect(output).toContain("Branch: manciple/extract-auth-middleware");
+      const first = worktreeCommand("extract-auth-middleware", commandOptions());
+      const second = worktreeCommand("extract-auth-middleware", commandOptions());
+      expect(second.workspacePath).toBe(first.workspacePath);
+      expect(git(["worktree", "list", "--porcelain"]).match(/^worktree /gm)).toHaveLength(2);
     } finally {
       logSpy.mockRestore();
     }
   });
 
-  it("refuses a non-empty unrelated worktree path unless forced", () => {
-    const worktreePath = join(p.worktrees, "extract-auth-middleware");
-    mkdirSync(worktreePath, { recursive: true });
-    writeFileSync(join(worktreePath, "notes.txt"), "not a git worktree\n", "utf-8");
-
-    const runner = vi.fn((args: string[], options?: { cwd?: string }) => {
-      if (args.join(" ") === "rev-parse --show-toplevel" && options?.cwd === cwd) {
-        return cwd;
-      }
-      if (args[0] === "-C") {
-        throw new Error("not a worktree");
-      }
-      return "";
-    });
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = mockExit();
-
-    try {
-      expect(() => worktreeCommand("extract-auth-middleware", {
-        cwd,
-        worktreesDir: p.worktrees,
-        runner,
-      })).toThrow("process.exit(1)");
-
-      expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(errorSpy.mock.calls.flat().join("\n")).toContain(
-        "Refusing to overwrite non-empty worktree path: .manciple/worktrees/extract-auth-middleware",
-      );
-      expect(existsSync(join(worktreePath, "notes.txt"))).toBe(true);
-    } finally {
-      errorSpy.mockRestore();
-      exitSpy.mockRestore();
-    }
+  it("fails closed when primary code is dirty", () => {
+    writeFileSync(join(cwd, "src", "index.ts"), "export const dirty = true;\n", "utf-8");
+    expect(() => worktreeCommand("extract-auth-middleware", commandOptions()))
+      .toThrow("primary code is dirty: src/index.ts");
+    expect(existsSync(join(p.worktrees, "extract-auth-middleware"))).toBe(false);
+    expect(readFileSync(join(p.tasksActive, "extract-auth-middleware.yaml"), "utf-8"))
+      .toContain("status: pending");
   });
 
-  it("removes a non-empty unrelated path when forced", () => {
-    const worktreePath = join(p.worktrees, "extract-auth-middleware");
-    mkdirSync(worktreePath, { recursive: true });
-    writeFileSync(join(worktreePath, "notes.txt"), "not a git worktree\n", "utf-8");
+  it("never adopts an unregistered pre-existing task branch", () => {
+    git(["branch", "manciple/extract-auth-middleware"]);
+    expect(() => worktreeCommand("extract-auth-middleware", commandOptions()))
+      .toThrow("Refusing to adopt unregistered task branch");
+    expect(existsSync(join(p.worktrees, "extract-auth-middleware"))).toBe(false);
+  });
 
-    const runner = vi.fn((args: string[], options?: { cwd?: string }) => {
-      if (args.join(" ") === "rev-parse --show-toplevel" && options?.cwd === cwd) {
-        return cwd;
-      }
-      if (args[0] === "-C") {
-        throw new Error("not a worktree");
-      }
-      return "";
-    });
+  it("uses the configured default for task start", () => {
+    const result = runCli(["task", "start", "extract-auth-middleware"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(join(p.worktrees, "extract-auth-middleware"))).toBe(true);
+    expect(readFileSync(join(p.tasksActive, "extract-auth-middleware.yaml"), "utf-8"))
+      .toContain("status: in_progress");
+  });
+
+  it("allows --no-worktrees to override enabled automation", () => {
+    const result = runCli(["task", "start", "extract-auth-middleware", "--no-worktrees"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(join(p.worktrees, "extract-auth-middleware"))).toBe(false);
+    expect(readFileSync(join(p.tasksActive, "extract-auth-middleware.yaml"), "utf-8"))
+      .toContain("status: in_progress");
+  });
+
+  it("allows --worktrees to override disabled automation", () => {
+    writeFileSync(p.config, "root: .manciple\nworktrees:\n  enabled: false\n", "utf-8");
+    const result = runCli(["task", "start", "extract-auth-middleware", "--worktrees"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(join(p.worktrees, "extract-auth-middleware"))).toBe(true);
+  });
+
+  it("never overwrites an unrelated non-empty path", () => {
+    const path = join(p.worktrees, "extract-auth-middleware");
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, "notes.txt"), "keep me\n", "utf-8");
+    expect(() => worktreeCommand("extract-auth-middleware", commandOptions()))
+      .toThrow("Refusing to overwrite unrelated worktree path");
+    expect(existsSync(join(path, "notes.txt"))).toBe(true);
+  });
+
+  it("rejects a managed root outside the primary checkout", () => {
+    expect(() => worktreeCommand("extract-auth-middleware", {
+      cwd,
+      worktreesDir: join(cwd, "..", "outside-worktrees"),
+      specsTasksDir: p.specsTasks,
+    })).toThrow("must be inside the primary checkout");
+  });
+
+  it("removes only a registered managed worktree and its merged branch", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-
     try {
-      worktreeCommand("extract-auth-middleware", {
-        cwd,
+      worktreeCommand("extract-auth-middleware", commandOptions());
+      const removed = removeManagedWorktree("extract-auth-middleware", {
+        controlRepo: cwd,
         worktreesDir: p.worktrees,
-        force: true,
-        runner,
+        specsTasksDir: p.specsTasks,
       });
-
-      expect(existsSync(join(worktreePath, "notes.txt"))).toBe(false);
-      expect(runner).toHaveBeenCalledWith(
-        ["worktree", "add", "-b",             "manciple/extract-auth-middleware", worktreePath, "HEAD"],
-        { cwd },
-      );
+      expect(existsSync(removed.workspacePath)).toBe(false);
+      expect(git(["branch", "--list", removed.branch])).toBe("");
+      expect(getManagedWorktree("extract-auth-middleware", {
+        controlRepo: cwd,
+        worktreesDir: p.worktrees,
+      })).toBeUndefined();
     } finally {
       logSpy.mockRestore();
     }
   });
 
   it("fails clearly outside a git repository", () => {
-    const runner = vi.fn(() => {
-      throw new Error("fatal: not a git repository");
-    });
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = mockExit();
-
+    const outside = mkdtempSync(join(tmpdir(), "manciple-worktree-nongit-"));
+    const outsidePaths = getPaths(outside, ".manciple");
+    mkdirSync(outsidePaths.tasksActive, { recursive: true });
+    writeFileSync(join(outsidePaths.tasksActive, "extract-auth-middleware.yaml"), taskYaml("extract-auth-middleware"), "utf-8");
     try {
       expect(() => worktreeCommand("extract-auth-middleware", {
-        cwd,
-        worktreesDir: p.worktrees,
-        runner,
-      })).toThrow("process.exit(1)");
-
-      expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(errorSpy.mock.calls.flat().join("\n")).toContain(
-        "Not a git repository. Run manciple worktree from inside a git repository.",
-      );
+        cwd: outside,
+        worktreesDir: outsidePaths.worktrees,
+        specsTasksDir: outsidePaths.specsTasks,
+      })).toThrow();
     } finally {
-      errorSpy.mockRestore();
-      exitSpy.mockRestore();
+      rmSync(outside, { recursive: true, force: true });
     }
+  });
+
+  it("normalizes the legacy create shortcut without rewriting grouped commands", () => {
+    expect(normalizeLegacyWorktreeArgs(["node", "manciple", "worktree", "task-id"]))
+      .toEqual(["node", "manciple", "worktree", "create", "task-id"]);
+    expect(normalizeLegacyWorktreeArgs(["node", "manciple", "worktree", "list", "--json"]))
+      .toEqual(["node", "manciple", "worktree", "list", "--json"]);
+    expect(normalizeLegacyWorktreeArgs(["node", "manciple", "worktree", "--help"]))
+      .toEqual(["node", "manciple", "worktree", "--help"]);
   });
 });

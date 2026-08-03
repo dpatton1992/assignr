@@ -1,0 +1,54 @@
+id: implement-managed-worktree-execution
+title: Implement managed worktree execution
+status: needs_review
+type: implementation
+domain: core
+priority: high
+depends_on: []
+allowed_paths:
+  - src/**
+  - tests/**
+  - docs/**
+  - README.md
+  - .codex/skills/**
+  - .claude/skills/**
+  - .opencode/agents/**
+  - .manciple/tasks/**
+forbidden_paths: []
+goal: Implement configurable managed worktrees across dispatch, worker evidence, review
+  integration, CLI, MCP, packaged agent assets, tests, and documentation.
+acceptance_criteria:
+  - Worktree automation is enabled by default and can be disabled by config or
+    overridden per supported CLI and MCP operation.
+  - Managed task worktrees use deterministic safe paths, branches, shared claim state,
+    explicit maintenance commands, and fail-closed validation.
+  - Dispatch packets and worker tools distinguish the primary control repo from the
+    editable task workspace.
+  - Run logs and review packets capture committed, staged, unstaged, and untracked task
+    changes from the managed workspace.
+  - Approval gates, prospectively verifies, and no-fast-forward merges managed work
+    before completion, retaining the workspace on failure and cleaning it on success.
+  - Direct completion cannot bypass managed-worktree integration, and in-place execution
+    cannot silently replace an existing managed workspace.
+  - Packaged agent skills and project documentation describe and enforce the
+    control-repo/workspace workflow.
+  - Lint, build, the complete test suite, and package dry-run verification pass.
+implementation_notes:
+  - Worktrees are enabled by default with explicit in-place opt-out.
+  - The primary checkout is the control plane; task code changes remain isolated until
+    transactional review approval.
+verification:
+  commands:
+    - pnpm run lint
+    - pnpm run build
+    - pnpm test
+outputs_required:
+  - files_changed
+  - tests_run
+  - risks
+  - follow_up_tasks
+notes:
+  - Recovery task created after implementation because the work was mistakenly performed
+    outside Manciple lifecycle tracking.
+  - Do not represent the existing primary-checkout edits as having been isolated in a
+    worktree.

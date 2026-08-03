@@ -1,4 +1,5 @@
 import { spawnSync, spawn } from "child_process";
+import { resolve } from "path";
 import type { ReviewPacket } from "../review/reviewPacket.js";
 
 /**
@@ -42,6 +43,12 @@ export interface DiffContext {
  */
 export function buildDiffContent(context: DiffContext): string {
   const { packet, cwd, run = defaultCommandRunner } = context;
+  const evidenceCwd = packet.worktree?.managed
+    ? resolve(cwd, packet.worktree.workspacePath)
+    : cwd;
+  const diffBase = packet.worktree?.managed
+    ? packet.worktree.baseSha ?? "HEAD"
+    : "HEAD";
   const paths = packet.changedPaths
     .map((changed) => changed.path)
     .filter((path) => path.length > 0 && !path.includes("\0"));
@@ -54,7 +61,7 @@ export function buildDiffContent(context: DiffContext): string {
     return sections.join("\n\n");
   }
 
-  const statusResult = run("git", ["status", "--porcelain", "--untracked-files=all", "--", ...paths], cwd);
+  const statusResult = run("git", ["status", "--porcelain", "--untracked-files=all", "--", ...paths], evidenceCwd);
   const untracked = statusResult.stdout
     .split("\n")
     .filter((line) => line.startsWith("?? "))
@@ -67,7 +74,7 @@ export function buildDiffContent(context: DiffContext): string {
     );
   }
 
-  const diffResult = run("git", ["diff", "HEAD", "--", ...paths], cwd);
+  const diffResult = run("git", ["diff", diffBase, "--", ...paths], evidenceCwd);
   const diff = diffResult.stdout.trim();
   sections.push(
     diff

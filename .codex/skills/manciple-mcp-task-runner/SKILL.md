@@ -22,22 +22,23 @@ Once a task is selected, obey the task spec exactly. Do not expand or shrink `al
    - Call `manciple_get_task` only when you need the full YAML shape. Call `manciple_compile` only when the compact packet is insufficient and explicit domain context or full prompt prose is needed.
 
 2. Start the task.
-   - Call `manciple_set_status` with `in_progress` unless the packet already reports `in_progress`.
+   - Call `manciple_prepare_worktree` with the control repo and task id. This is the authoritative start operation: it marks a pending task `in_progress`, claims or creates its managed worktree when enabled, and returns `control_repo`, `workspace_path`, and `mode`.
+   - If preparation fails, stop. Do not silently fall back to editing the control repo, because that would mask worktree defects during dogfooding.
    - Treat `allowed_paths`, `forbidden_paths`, `acceptance_criteria`, `implementation_notes`, `verification_commands`, and `outputs_required` as binding constraints.
 
 3. Implement the work.
-   - Inspect the repo before editing.
+   - Inspect and edit only the returned `workspace_path`. The returned `control_repo` remains the central task, run-log, dispatch, and review state plane.
    - Do not edit files under `.manciple/specs/tasks/` directly. Task status updates must go through `manciple_set_status`.
    - Stay inside `allowed_paths` when present. Do not edit `forbidden_paths` unless the user explicitly overrides the task.
    - Keep changes scoped to the task. If required work is outside scope, stop and report it as a follow-up instead of silently expanding the task.
 
 4. Verify.
-   - Prefer `manciple_verify` with profile `worker` when MCP tools are available, or `manciple verify --profile worker` from the CLI. Report the returned receipt.
+   - Prefer `manciple_verify` with `repo` set to `control_repo`, `workspace` set to `workspace_path`, and profile `worker` when MCP tools are available. If the returned mode is `in_place`, the two paths are the same. Report the returned receipt.
    - Treat that deterministic worker receipt as the primary verification evidence. Do not stack routine manual checklists on top of it; run additional targeted checks only when they are directly relevant to files changed or needed to diagnose a failure.
    - Use `manciple_format_task` with `check_only: true` or `manciple format-task <task-id> --check` only when scoped task YAML formatting evidence is needed. Do not run routine whole-repo YAML formatting loops during worker completion.
 
 5. Finish.
-   - Call `manciple_run_log` after implementation and verification. Include final task status, files changed, non-test commands in `commands_run`, test commands or receipts in `tests_run`, the deterministic verify receipt, acceptance criteria evidence, result, notes, and residual risks.
+   - Call `manciple_run_log` against `control_repo` with `workspace` set to `workspace_path` after implementation and verification. Include final task status, files changed, non-test commands in `commands_run`, test commands or receipts in `tests_run`, the deterministic verify receipt, acceptance criteria evidence, result, notes, and residual risks.
    - Format each acceptance evidence line as `<exact criterion text> => <evidence>`. Do not paraphrase the criterion on the left side; deterministic review uses the exact task text as the mapping key.
    - For completed implementation work that changed behavior, include `Decisions Made`; omit it only when the task was blocked before meaningful changes.
    - Call `manciple_validate` before final status updates when task specs may have changed or the assignment requests metadata validation.
@@ -49,7 +50,7 @@ Once a task is selected, obey the task spec exactly. Do not expand or shrink `al
 
 ## Tool Result Handling
 
-Assignr MCP tool responses return JSON as text content. Parse the text before using it. If a tool result has `isError: true`, treat the JSON `error` as an operational error, not as a crashed server.
+Manciple MCP tool responses return JSON as text content. Parse the text before using it. If a tool result has `isError: true`, treat the JSON `error` as an operational error, not as a crashed server.
 
 Use `manciple_compile` content directly only after deciding full prompt context is necessary. Use `manciple_get_compiled_prompt` only when a generated prompt may already exist or the user specifically asks for it.
 
@@ -66,4 +67,4 @@ Keep the report concise, but preserve concrete command names and failure details
 
 ## CLI/MCP Parity
 
-When working on Assignr itself, keep CLI and MCP behavior aligned. Prefer shared task-operation logic for features exposed by both surfaces, with thin CLI formatting and MCP JSON result layers. Use separate specs only for transport-specific behavior such as terminal output, stdio protocol handling, and MCP error formatting.
+When working on Manciple itself, keep CLI and MCP behavior aligned. Prefer shared task-operation logic for features exposed by both surfaces, with thin CLI formatting and MCP JSON result layers. Use separate specs only for transport-specific behavior such as terminal output, stdio protocol handling, and MCP error formatting.
