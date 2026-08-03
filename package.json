@@ -1,6 +1,6 @@
 {
 	"name": "manciple",
-	"version": "0.4.8",
+	"version": "0.4.9",
 	"description": "A repo-native workflow layer for existing coding agents.",
 	"license": "MIT",
 	"author": "Daniel Patton",
