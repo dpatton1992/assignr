@@ -1,6 +1,6 @@
 id: enforce-release-tag-package-version-invariant
 title: Enforce the release tag package version invariant
-status: pending
+status: complete
 type: hardening
 domain: core
 priority: critical

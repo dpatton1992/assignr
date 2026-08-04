@@ -1,6 +1,6 @@
 id: type-check-tests-and-add-biome-quality-gates
 title: Type-check tests and add Biome quality gates
-status: pending
+status: complete
 type: hardening
 domain: core
 priority: medium

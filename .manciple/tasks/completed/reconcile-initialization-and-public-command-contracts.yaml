@@ -1,6 +1,6 @@
 id: reconcile-initialization-and-public-command-contracts
 title: Reconcile initialization and public command contracts
-status: pending
+status: complete
 type: hardening
 domain: core
 priority: high

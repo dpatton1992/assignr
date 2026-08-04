@@ -1,6 +1,6 @@
 id: centralize-task-creation-and-lifecycle-services
 title: Centralize task creation and lifecycle services
-status: pending
+status: complete
 type: refactor
 domain: core
 priority: high
