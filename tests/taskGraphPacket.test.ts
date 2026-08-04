@@ -1,19 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { stringify } from "yaml";
-
-import { initCommand } from "../src/commands/init.js";
 import { completeCommand } from "../src/commands/complete.js";
+import { initCommand } from "../src/commands/init.js";
 import { runLogCommand } from "../src/commands/runLog.js";
-import { getPaths } from "../src/utils/paths.js";
 import {
   getTaskGraphNeighborhood,
   getTaskGraphPacket,
   TaskGraphError,
 } from "../src/graph/taskGraphPacket.js";
 import type { TaskSpec } from "../src/specs/schema.js";
+import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
@@ -59,7 +58,11 @@ function defaultTask(id: string, overrides: Partial<TaskSpec> = {}): TaskSpec {
 
 function writeTask(id: string, overrides: Partial<TaskSpec> = {}): void {
   mkdirSync(p.tasksActive, { recursive: true });
-  writeFileSync(join(p.tasksActive, `${id}.yaml`), stringify(defaultTask(id, overrides), { lineWidth: 0 }), "utf-8");
+  writeFileSync(
+    join(p.tasksActive, `${id}.yaml`),
+    stringify(defaultTask(id, overrides), { lineWidth: 0 }),
+    "utf-8",
+  );
 }
 
 function writeArchivedTask(id: string, overrides: Partial<TaskSpec> = {}): void {
@@ -67,7 +70,7 @@ function writeArchivedTask(id: string, overrides: Partial<TaskSpec> = {}): void 
   writeFileSync(
     join(p.tasksArchived, `${id}.yaml`),
     stringify(defaultTask(id, { status: "archived", ...overrides }), { lineWidth: 0 }),
-    "utf-8"
+    "utf-8",
   );
 }
 
@@ -130,15 +133,15 @@ describe("getTaskGraphPacket", () => {
       risks: [],
       hasDetailedReviewPacket: true,
     });
-    expect(node!.receipt.present).toBe(true);
-    expect(node!.receipt.health).toBe("passing");
-    expect(node!.receipt.isLatestSuperseded).toBe(false);
-    expect(node!.receipt.latestIdentifier).toMatch(/alpha-node\.md$/);
-    expect(node!.receipt.result).toBe("complete");
-    expect(node!.verification.health).toBe("passing");
-    expect(node!.verification.hasVerification).toBe(true);
-    expect(node!.verification.missingCommands).toEqual([]);
-    expect(node!.verification.failedCommands).toEqual([]);
+    expect(node?.receipt.present).toBe(true);
+    expect(node?.receipt.health).toBe("passing");
+    expect(node?.receipt.isLatestSuperseded).toBe(false);
+    expect(node?.receipt.latestIdentifier).toMatch(/alpha-node\.md$/);
+    expect(node?.receipt.result).toBe("complete");
+    expect(node?.verification.health).toBe("passing");
+    expect(node?.verification.hasVerification).toBe(true);
+    expect(node?.verification.missingCommands).toEqual([]);
+    expect(node?.verification.failedCommands).toEqual([]);
   });
 
   it("includes active tasks plus referenced completed and archived tasks and reports dangling references", () => {
@@ -156,13 +159,7 @@ describe("getTaskGraphPacket", () => {
     const packet = getTaskGraphPacket({}, graphContext());
     const ids = packet.nodes.map((n) => n.taskId);
 
-    expect(ids).toEqual([
-      "arch-ref",
-      "conflict-task",
-      "dep-done",
-      "main-task",
-      "other-active",
-    ]);
+    expect(ids).toEqual(["arch-ref", "conflict-task", "dep-done", "main-task", "other-active"]);
     expect(ids).not.toContain("unreferenced-done");
     expect(packet.referencedButAbsent).toEqual(["missing-ref"]);
 
@@ -238,28 +235,28 @@ describe("getTaskGraphPacket", () => {
     const packet = getTaskGraphPacket({}, graphContext());
     const edge = packet.edges.find((e) => e.type === "ownership_overlap");
     expect(edge).toBeDefined();
-    expect(edge!.source).toBe("owner-a");
-    expect(edge!.target).toBe("owner-b");
-    expect(edge!.directed).toBe(false);
-    expect(edge!.severity).toBe("locked");
-    expect(edge!.matchedPaths).toBeDefined();
+    expect(edge?.source).toBe("owner-a");
+    expect(edge?.target).toBe("owner-b");
+    expect(edge?.directed).toBe(false);
+    expect(edge?.severity).toBe("locked");
+    expect(edge?.matchedPaths).toBeDefined();
 
-    const kinds = edge!.matchedPaths!.map((m) => m.kind);
+    const kinds = edge?.matchedPaths?.map((m) => m.kind);
     expect(kinds).toContain("allowed");
     expect(kinds).toContain("touched");
     expect(kinds).toContain("locked");
     expect(kinds).toContain("unsafe_parallel_area");
 
     // Strongest collisions sort first.
-    expect(edge!.matchedPaths![0].kind).toBe("locked");
+    expect(edge?.matchedPaths?.[0].kind).toBe("locked");
 
     // Ordinary allowed-path overlap is classified as allowed, not touched.
-    const plainAllowed = edge!.matchedPaths!.find(
-      (m) => m.path === "src/shared/**" && m.otherPath === "src/shared/**"
+    const plainAllowed = edge?.matchedPaths?.find(
+      (m) => m.path === "src/shared/**" && m.otherPath === "src/shared/**",
     );
     expect(plainAllowed?.kind).toBe("allowed");
 
-    for (const match of edge!.matchedPaths!) {
+    for (const match of edge?.matchedPaths ?? []) {
       expect(match.path.length).toBeGreaterThan(0);
       expect(match.otherPath.length).toBeGreaterThan(0);
       expect(match.reason).toContain("owner-a");
@@ -301,32 +298,32 @@ describe("getTaskGraphPacket", () => {
 
     const packet = getTaskGraphPacket({}, graphContext());
 
-    const missing = packet.nodes.find((n) => n.taskId === "health-missing")!;
-    expect(missing.receipt).toEqual({
+    const missing = packet.nodes.find((n) => n.taskId === "health-missing");
+    expect(missing?.receipt).toEqual({
       present: false,
       health: "missing",
       isLatestSuperseded: false,
     });
-    expect(missing.verification.health).toBe("missing");
+    expect(missing?.verification.health).toBe("missing");
 
-    const incomplete = packet.nodes.find((n) => n.taskId === "health-incomplete")!;
-    expect(incomplete.receipt.present).toBe(true);
-    expect(incomplete.receipt.health).toBe("incomplete");
-    expect(incomplete.receipt.result).toBeUndefined();
+    const incomplete = packet.nodes.find((n) => n.taskId === "health-incomplete");
+    expect(incomplete?.receipt.present).toBe(true);
+    expect(incomplete?.receipt.health).toBe("incomplete");
+    expect(incomplete?.receipt.result).toBeUndefined();
     // A command mention without a recorded result is not classified as passing.
-    expect(incomplete.verification.health).toBe("incomplete");
-    expect(incomplete.verification.hasVerification).toBe(false);
+    expect(incomplete?.verification.health).toBe("incomplete");
+    expect(incomplete?.verification.hasVerification).toBe(false);
 
-    const passing = packet.nodes.find((n) => n.taskId === "health-passing")!;
-    expect(passing.receipt.health).toBe("passing");
-    expect(passing.verification.health).toBe("passing");
-    expect(passing.risks).toEqual([]);
+    const passing = packet.nodes.find((n) => n.taskId === "health-passing");
+    expect(passing?.receipt.health).toBe("passing");
+    expect(passing?.verification.health).toBe("passing");
+    expect(passing?.risks).toEqual([]);
 
-    const failing = packet.nodes.find((n) => n.taskId === "health-failing")!;
-    expect(failing.receipt.health).toBe("failing");
-    expect(failing.verification.health).toBe("failing");
-    expect(failing.verification.failedCommands).toEqual(["pnpm test"]);
-    expect(failing.risks).toEqual(["Flaky integration test observed."]);
+    const failing = packet.nodes.find((n) => n.taskId === "health-failing");
+    expect(failing?.receipt.health).toBe("failing");
+    expect(failing?.verification.health).toBe("failing");
+    expect(failing?.verification.failedCommands).toEqual(["pnpm test"]);
+    expect(failing?.risks).toEqual(["Flaky integration test observed."]);
   });
 
   it("bases receipt health on the latest non-superseded run log", () => {
@@ -350,15 +347,17 @@ describe("getTaskGraphPacket", () => {
       testsRun: ["pnpm test"],
     });
 
-    const runLogFiles = readdirSync(p.runs).filter((file) => file.endsWith("receipt-seq.md")).sort();
+    const runLogFiles = readdirSync(p.runs)
+      .filter((file) => file.endsWith("receipt-seq.md"))
+      .sort();
     expect(runLogFiles).toHaveLength(2);
 
     let packet = getTaskGraphPacket({}, graphContext());
-    let node = packet.nodes.find((n) => n.taskId === "receipt-seq")!;
-    expect(node.receipt.present).toBe(true);
-    expect(node.receipt.isLatestSuperseded).toBe(false);
-    expect(node.receipt.health).toBe("failing");
-    expect(node.receipt.latestIdentifier).toBe(runLogFiles[1]);
+    let node = packet.nodes.find((n) => n.taskId === "receipt-seq");
+    expect(node?.receipt.present).toBe(true);
+    expect(node?.receipt.isLatestSuperseded).toBe(false);
+    expect(node?.receipt.health).toBe("failing");
+    expect(node?.receipt.latestIdentifier).toBe(runLogFiles[1]);
 
     // A newest run log that is itself superseded is skipped in favor of the
     // latest non-superseded receipt.
@@ -379,15 +378,15 @@ describe("getTaskGraphPacket", () => {
         "failed",
         "",
       ].join("\n"),
-      "utf-8"
+      "utf-8",
     );
 
     packet = getTaskGraphPacket({}, graphContext());
-    node = packet.nodes.find((n) => n.taskId === "receipt-seq")!;
-    expect(node.receipt.isLatestSuperseded).toBe(true);
-    expect(node.receipt.health).toBe("failing");
-    expect(node.receipt.latestIdentifier).toBe(runLogFiles[1]);
-    expect(node.receipt.result).toBe("failed");
+    node = packet.nodes.find((n) => n.taskId === "receipt-seq");
+    expect(node?.receipt.isLatestSuperseded).toBe(true);
+    expect(node?.receipt.health).toBe("failing");
+    expect(node?.receipt.latestIdentifier).toBe(runLogFiles[1]);
+    expect(node?.receipt.result).toBe("failed");
   });
 
   it("supports all-tasks mode and tier, status, and domain filters", () => {
@@ -467,9 +466,7 @@ describe("getTaskGraphPacket", () => {
     const second = getTaskGraphPacket({}, graphContext());
 
     expect(second).toEqual(first);
-    expect(first.nodes.map((n) => n.taskId)).toEqual(
-      [...first.nodes.map((n) => n.taskId)].sort()
-    );
+    expect(first.nodes.map((n) => n.taskId)).toEqual([...first.nodes.map((n) => n.taskId)].sort());
     expect(first.edges.map((e) => `${e.type}:${e.source}->${e.target}`)).toEqual([
       "depends_on:det-a->det-b",
       "conflicts_with:det-a->det-c",
@@ -520,7 +517,7 @@ describe("getTaskGraphNeighborhood", () => {
     const packet = getTaskGraphNeighborhood(
       "hub",
       { depth: 2, edgeTypes: ["depends_on"] },
-      graphContext()
+      graphContext(),
     );
     expect(packet.nodes.map((n) => n.taskId)).toEqual(["hub", "mid"]);
     expect(packet.edges.every((e) => e.type === "depends_on")).toBe(true);
@@ -531,7 +528,7 @@ describe("getTaskGraphNeighborhood", () => {
 
     expect(() => getTaskGraphNeighborhood("ghost", {}, graphContext())).toThrow(TaskGraphError);
     expect(() => getTaskGraphNeighborhood("ghost", {}, graphContext())).toThrow(
-      "Task not found in graph: ghost"
+      "Task not found in graph: ghost",
     );
   });
 

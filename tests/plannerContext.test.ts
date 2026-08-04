@@ -1,13 +1,10 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import {
-  buildPlannerContext,
-  plannerContextCommand,
-} from "../src/commands/plannerContext.js";
-import { getPaths } from "../src/utils/paths.js";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildPlannerContext, plannerContextCommand } from "../src/commands/plannerContext.js";
 import type { TaskTier } from "../src/specs/loadTasks.js";
+import { getPaths } from "../src/utils/paths.js";
 
 const tempDirs: string[] = [];
 
@@ -29,12 +26,7 @@ function yamlList(values: string[]): string[] {
   return ["", ...values.map((value) => `  - ${value}`)];
 }
 
-function writeTask(
-  root: string,
-  tier: TaskTier,
-  id: string,
-  options: WriteTaskOptions = {}
-): void {
+function writeTask(root: string, tier: TaskTier, id: string, options: WriteTaskOptions = {}): void {
   const paths = getPaths(root, ".manciple");
   const dirByTier = {
     active: paths.tasksActive,
@@ -68,7 +60,7 @@ function writeTask(
       `notes:${yamlList(options.notes ?? ["Private run-log style body should stay out."]).join("\n")}`,
       "",
     ].join("\n"),
-    "utf-8"
+    "utf-8",
   );
 }
 
@@ -137,11 +129,15 @@ describe("buildPlannerContext", () => {
     const result = buildPlannerContext(paths.specsTasks);
 
     expect(result.output).toContain(
-      "compact-task [in_progress/test/payments/critical] deps:2 conflicts:1"
+      "compact-task [in_progress/test/payments/critical] deps:2 conflicts:1",
     );
-    expect(result.output).toContain("paths:src/payments/, tests/payments.test.ts, docs/payments.md (+1)");
+    expect(result.output).toContain(
+      "paths:src/payments/, tests/payments.test.ts, docs/payments.md (+1)",
+    );
     expect(result.output).toContain("goal: Ship a focused planner summary.");
-    expect(result.output).not.toContain("This acceptance criterion is intentionally not planner context.");
+    expect(result.output).not.toContain(
+      "This acceptance criterion is intentionally not planner context.",
+    );
     expect(result.output).not.toContain("Run log body should not appear in planner context.");
     expect(result.output).not.toContain("verification:");
   });
@@ -209,12 +205,14 @@ describe("plannerContextCommand", () => {
     writeTask(root, "active", "alpha-task");
     writeTask(root, "active", "bravo-task");
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     expect(() =>
-      plannerContextCommand(paths.specsTasks, root, { maxChars: 320, strict: true })
+      plannerContextCommand(paths.specsTasks, root, { maxChars: 320, strict: true }),
     ).toThrow("process.exit(1)");
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(logSpy.mock.calls.flat().join("\n")).toContain("Warning: Planner context truncated");

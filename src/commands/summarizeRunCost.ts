@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
-import { basename, join } from "path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
 import { extractRunLogSection, parseRunLogListSection } from "../review/evidence.js";
 
 interface RunLogRecord {
@@ -126,14 +126,15 @@ export function summarizeRunCost(runsDir: string, taskId?: string): RunCostSumma
     commandsRecorded += record.commandsRun.length;
     testsRecorded += record.testsRun.length;
 
-    const hasTokenEvidence = record.inputTokens !== undefined ||
+    const hasTokenEvidence =
+      record.inputTokens !== undefined ||
       record.outputTokens !== undefined ||
       record.totalTokens !== undefined;
     if (hasTokenEvidence) {
       tokenRuns += 1;
       inputTokens += record.inputTokens ?? 0;
       outputTokens += record.outputTokens ?? 0;
-      totalTokens += record.totalTokens ?? ((record.inputTokens ?? 0) + (record.outputTokens ?? 0));
+      totalTokens += record.totalTokens ?? (record.inputTokens ?? 0) + (record.outputTokens ?? 0);
     }
 
     if (record.costUsd !== undefined) {
@@ -164,16 +165,18 @@ function renderUsage(values: CountedUsage[]): string {
 }
 
 export function renderRunCostSummary(summary: RunCostSummary, taskId?: string): string {
-  const tokenCoverage = summary.runCount === 0
-    ? "Unknown: no run logs found."
-    : summary.tokenRuns === 0
-      ? "Unknown: no token evidence recorded."
-      : `${summary.tokenRuns}/${summary.runCount} run(s) include token evidence.`;
-  const costCoverage = summary.runCount === 0
-    ? "Unknown: no run logs found."
-    : summary.costRuns === 0
-      ? "Unknown: no cost evidence recorded."
-      : `${summary.costRuns}/${summary.runCount} run(s) include cost evidence.`;
+  const tokenCoverage =
+    summary.runCount === 0
+      ? "Unknown: no run logs found."
+      : summary.tokenRuns === 0
+        ? "Unknown: no token evidence recorded."
+        : `${summary.tokenRuns}/${summary.runCount} run(s) include token evidence.`;
+  const costCoverage =
+    summary.runCount === 0
+      ? "Unknown: no run logs found."
+      : summary.costRuns === 0
+        ? "Unknown: no cost evidence recorded."
+        : `${summary.costRuns}/${summary.runCount} run(s) include cost evidence.`;
 
   return `# Run Cost Summary${taskId ? `: ${taskId}` : ""}
 

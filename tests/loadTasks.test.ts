@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import type { TaskTier } from "../src/specs/loadTasks.js";
 import { loadTasks } from "../src/specs/loadTasks.js";
 import { getPaths } from "../src/utils/paths.js";
-import type { TaskTier } from "../src/specs/loadTasks.js";
 
 function makeTaskYaml(id: string, status = "pending"): string {
   return [
@@ -120,10 +120,7 @@ describe("loadTasks", () => {
       const { tasks, errors } = loadTasks(paths.specsTasks, "all");
 
       expect(errors).toEqual([]);
-      expect(tasks.map((task) => task.spec.id)).toEqual([
-        "active-task",
-        "archived-task",
-      ]);
+      expect(tasks.map((task) => task.spec.id)).toEqual(["active-task", "archived-task"]);
       expect(tasks.map((task) => task.tier)).toEqual(["active", "archived"]);
     } finally {
       rmSync(cwd, { recursive: true, force: true });

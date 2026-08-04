@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { parse } from "yaml";
 import { DEFAULT_ROOT } from "./constants.js";
 
@@ -22,7 +22,9 @@ export function loadConfig(cwd: string = process.cwd()): MancipleConfig {
   } | null;
   if (
     parsed?.worktrees !== undefined &&
-    (parsed.worktrees === null || typeof parsed.worktrees !== "object" || Array.isArray(parsed.worktrees))
+    (parsed.worktrees === null ||
+      typeof parsed.worktrees !== "object" ||
+      Array.isArray(parsed.worktrees))
   ) {
     throw new Error("Invalid Manciple config: worktrees must be a mapping.");
   }

@@ -1,13 +1,18 @@
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "fs";
-import { join } from "path";
-import { spawnSync } from "child_process";
 
 describe("manciple-token-audit script", () => {
   it("delegates to the deterministic token-estimate command and prints bucket output", () => {
     const result = spawnSync(
       process.execPath,
-      ["scripts/manciple-token-audit.mjs", "add-assignr-token-estimate-command", "--budget", "999999"],
+      [
+        "scripts/manciple-token-audit.mjs",
+        "add-assignr-token-estimate-command",
+        "--budget",
+        "999999",
+      ],
       {
         cwd: process.cwd(),
         encoding: "utf-8",
@@ -16,8 +21,12 @@ describe("manciple-token-audit script", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("# Token Estimate: add-assignr-token-estimate-command");
-    expect(result.stdout).toContain("Deterministic local heuristic: estimated tokens = ceil(characters / 4). No external APIs are called.");
-    expect(result.stdout).toContain("Scope: estimates Manciple artifact/context bloat only, not total provider, harness, tool, retry, reasoning, or generated-output usage.");
+    expect(result.stdout).toContain(
+      "Deterministic local heuristic: estimated tokens = ceil(characters / 4). No external APIs are called.",
+    );
+    expect(result.stdout).toContain(
+      "Scope: estimates Manciple artifact/context bloat only, not total provider, harness, tool, retry, reasoning, or generated-output usage.",
+    );
     expect(result.stdout).toContain("## Token Buckets");
     expect(result.stdout).toContain("Risk: within budget");
   });

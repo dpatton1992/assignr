@@ -1,7 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { homedir } from "os";
-import { dirname, join, relative } from "path";
-import { fileURLToPath } from "url";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import picocolors from "picocolors";
 
 interface McpConfig {
@@ -51,7 +50,9 @@ function setupOpenCodeGlobalConfig(force: boolean): void {
       config = JSON.parse(readFileSync(configPath, "utf-8")) as OpenCodeConfig;
     } catch {
       if (!force) {
-        console.log(`  ${picocolors.yellow('-')} ${configPath} (unparseable, use --force to overwrite)`);
+        console.log(
+          `  ${picocolors.yellow("-")} ${configPath} (unparseable, use --force to overwrite)`,
+        );
         return;
       }
       config = {};
@@ -59,7 +60,7 @@ function setupOpenCodeGlobalConfig(force: boolean): void {
   }
 
   const mcp = config.mcp ?? {};
-  if (Object.prototype.hasOwnProperty.call(mcp, SERVER_NAME)) {
+  if (Object.hasOwn(mcp, SERVER_NAME)) {
     if (!force) {
       return; // idempotent — already configured
     }
@@ -78,7 +79,7 @@ function setupOpenCodeGlobalConfig(force: boolean): void {
   }
 
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
-  console.log(`  ${picocolors.green('✓')} ${configPath} (${SERVER_NAME})`);
+  console.log(`  ${picocolors.green("✓")} ${configPath} (${SERVER_NAME})`);
 }
 
 /**
@@ -94,7 +95,9 @@ function setupLocalMcpConfig(cwd: string, force: boolean): void {
       config = JSON.parse(readFileSync(configPath, "utf-8")) as McpConfig;
     } catch {
       if (!force) {
-        console.log(`  ${picocolors.yellow('-')} ${relative(cwd, configPath)} (unparseable, use --force to overwrite)`);
+        console.log(
+          `  ${picocolors.yellow("-")} ${relative(cwd, configPath)} (unparseable, use --force to overwrite)`,
+        );
         return;
       }
     }
@@ -103,12 +106,14 @@ function setupLocalMcpConfig(cwd: string, force: boolean): void {
   const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>;
   if (typeof mcpServers !== "object" || Array.isArray(mcpServers)) {
     if (!force) {
-      console.log(`  ${picocolors.yellow('-')} ${relative(cwd, configPath)} (invalid mcpServers, use --force to overwrite)`);
+      console.log(
+        `  ${picocolors.yellow("-")} ${relative(cwd, configPath)} (invalid mcpServers, use --force to overwrite)`,
+      );
       return;
     }
   }
 
-  if (Object.prototype.hasOwnProperty.call(mcpServers, SERVER_NAME)) {
+  if (Object.hasOwn(mcpServers, SERVER_NAME)) {
     if (!force) {
       return; // idempotent — already configured
     }
@@ -121,7 +126,7 @@ function setupLocalMcpConfig(cwd: string, force: boolean): void {
   config.mcpServers = mcpServers;
 
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
-  console.log(`  ${picocolors.green('✓')} ${relative(cwd, configPath)} (${SERVER_NAME})`);
+  console.log(`  ${picocolors.green("✓")} ${relative(cwd, configPath)} (${SERVER_NAME})`);
 }
 
 /**
@@ -151,7 +156,7 @@ export function mcpConfigCommand(options: { cwd: string; force: boolean }): void
       config = JSON.parse(readFileSync(configPath, "utf-8")) as McpConfig;
     } catch (err) {
       console.error(
-        `Could not parse ${relative(cwd, configPath)}: ${err instanceof Error ? err.message : String(err)}`
+        `Could not parse ${relative(cwd, configPath)}: ${err instanceof Error ? err.message : String(err)}`,
       );
       process.exit(1);
     }
@@ -163,9 +168,9 @@ export function mcpConfigCommand(options: { cwd: string; force: boolean }): void
     process.exit(1);
   }
 
-  if (Object.prototype.hasOwnProperty.call(mcpServers, SERVER_NAME) && !force) {
+  if (Object.hasOwn(mcpServers, SERVER_NAME) && !force) {
     console.error(
-      `${relative(cwd, configPath)} already has an "${SERVER_NAME}" MCP server. Use --force to overwrite it.`
+      `${relative(cwd, configPath)} already has an "${SERVER_NAME}" MCP server. Use --force to overwrite it.`,
     );
     process.exit(1);
   }
@@ -174,7 +179,7 @@ export function mcpConfigCommand(options: { cwd: string; force: boolean }): void
     ...mcpServers,
     [SERVER_NAME]: {
       command: "npx",
-    args: mancipleNpxArgs(),
+      args: mancipleNpxArgs(),
     },
   };
 

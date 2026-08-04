@@ -1,13 +1,12 @@
 import type { Command } from "commander";
-import { compileCommand } from "./compile.js";
+import { loadConfig } from "../config.js";
+import type { ManciplePaths } from "../utils/paths.js";
 import type { CompileOptions } from "./compile.js";
-import { taskPacketCommand } from "./taskPacket.js";
-import type { TaskPacketCommandOptions } from "./taskPacket.js";
+import { compileCommand } from "./compile.js";
 import { coordinatorCommand } from "./coordinator.js";
 import { dispatchPlanCommand } from "./dispatchPlan.js";
 import { plannerContextCommand } from "./plannerContext.js";
-import type { ManciplePaths } from "../utils/paths.js";
-import { loadConfig } from "../config.js";
+import { taskPacketCommand } from "./taskPacket.js";
 
 export interface HandoffContext {
   cwd: string;
@@ -20,10 +19,7 @@ export interface HandoffContext {
  * `manciple handoff <task-id>` — compile prompt
  * `manciple handoff <task-id> --packet` — compact worker packet
  */
-export function handoffCommand(
-  taskId: string,
-  ctx: HandoffContext & { packet?: boolean }
-): void {
+export function handoffCommand(taskId: string, ctx: HandoffContext & { packet?: boolean }): void {
   if (ctx.packet) {
     taskPacketCommand({
       specsTasksDir: ctx.specsTasksDir,
@@ -44,7 +40,9 @@ export function handoffCommand(
  * `manciple handoff queue` — coordinator queue
  * `manciple handoff queue --json` — dispatch plan JSON
  */
-export function handoffQueueCommand(ctx: HandoffContext & { json?: boolean; useWorktrees?: boolean }): void {
+export function handoffQueueCommand(
+  ctx: HandoffContext & { json?: boolean; useWorktrees?: boolean },
+): void {
   const useWorktrees = ctx.useWorktrees ?? loadConfig(ctx.cwd).worktrees.enabled;
   if (ctx.json) {
     dispatchPlanCommand(ctx.specsTasksDir, ctx.cwd, { useWorktrees });
@@ -64,7 +62,9 @@ function parseNumberOption(value: string): number {
 export function registerHandoffCommands(program: Command, p: ManciplePaths, cwd: string): void {
   const handoff = program
     .command("handoff [task-id]")
-    .description("Compile a task prompt, or inspect the worker queue. See `manciple handoff --help`.")
+    .description(
+      "Compile a task prompt, or inspect the worker queue. See `manciple handoff --help`.",
+    )
     .option("--packet", "Print compact worker packet instead of compiled prompt.", false)
     .action((taskId: string | undefined, opts: { packet: boolean }) => {
       if (taskId) {
@@ -82,7 +82,9 @@ export function registerHandoffCommands(program: Command, p: ManciplePaths, cwd:
 
   handoff
     .command("queue")
-    .description("Show runnable/deferred work (same as `manciple coordinator`). Use --json for dispatch plan (same as `manciple dispatch-plan`).")
+    .description(
+      "Show runnable/deferred work (same as `manciple coordinator`). Use --json for dispatch plan (same as `manciple dispatch-plan`).",
+    )
     .option("--json", "Print deterministic dispatch packet JSON.", false)
     .option("--worktrees", "Use managed worktrees for this dispatch.")
     .option("--no-worktrees", "Use in-place execution for this dispatch.")
@@ -101,7 +103,11 @@ export function registerHandoffCommands(program: Command, p: ManciplePaths, cwd:
     .command("compile [task-id]")
     .description("Compile task specs into markdown prompts.")
     .option("--status <status>", "Compile tasks with this status.")
-    .option("--all", "Compile tasks from active, completed, and archived lifecycle directories.", false)
+    .option(
+      "--all",
+      "Compile tasks from active, completed, and archived lifecycle directories.",
+      false,
+    )
     .action((taskId: string | undefined, opts: { status?: string; all: boolean }) => {
       compileCommand({
         specsTasksDir: p.tasksActive,
@@ -132,34 +138,50 @@ export function registerHandoffCommands(program: Command, p: ManciplePaths, cwd:
     .option("--completed", "Include completed lifecycle tasks instead of active tasks.")
     .option("--archived", "Include archived lifecycle tasks instead of active tasks.")
     .option("--all", "Include active, completed, and archived lifecycle tasks.")
-    .option("--max-chars <count>", "Warn and truncate generated context above this character budget.", parseNumberOption)
-    .option("--max-tokens <count>", "Warn and truncate generated context above this estimated token budget.", parseNumberOption)
-    .option("--strict", "Exit with status 1 when the requested budget truncates planner context.", false)
-    .action((opts: {
-      status?: string;
-      domain?: string;
-      completed?: boolean;
-      archived?: boolean;
-      all?: boolean;
-      maxChars?: number;
-      maxTokens?: number;
-      strict?: boolean;
-    }) => {
-      plannerContextCommand(p.specsTasks, cwd, {
-        status: opts.status,
-        domain: opts.domain,
-        completed: opts.completed,
-        archived: opts.archived,
-        all: opts.all,
-        maxChars: opts.maxChars,
-        maxTokens: opts.maxTokens,
-        strict: opts.strict,
-      });
-    });
+    .option(
+      "--max-chars <count>",
+      "Warn and truncate generated context above this character budget.",
+      parseNumberOption,
+    )
+    .option(
+      "--max-tokens <count>",
+      "Warn and truncate generated context above this estimated token budget.",
+      parseNumberOption,
+    )
+    .option(
+      "--strict",
+      "Exit with status 1 when the requested budget truncates planner context.",
+      false,
+    )
+    .action(
+      (opts: {
+        status?: string;
+        domain?: string;
+        completed?: boolean;
+        archived?: boolean;
+        all?: boolean;
+        maxChars?: number;
+        maxTokens?: number;
+        strict?: boolean;
+      }) => {
+        plannerContextCommand(p.specsTasks, cwd, {
+          status: opts.status,
+          domain: opts.domain,
+          completed: opts.completed,
+          archived: opts.archived,
+          all: opts.all,
+          maxChars: opts.maxChars,
+          maxTokens: opts.maxTokens,
+          strict: opts.strict,
+        });
+      },
+    );
 
   program
     .command("coordinator")
-    .description("Show the owner queue for runnable, waiting, review, complete-ready, blocked, and rework tasks.")
+    .description(
+      "Show the owner queue for runnable, waiting, review, complete-ready, blocked, and rework tasks.",
+    )
     .option("--worktrees", "Use managed-worktree dependency semantics.")
     .option("--no-worktrees", "Use in-place dependency semantics.")
     .action((opts: { worktrees?: boolean }) => {

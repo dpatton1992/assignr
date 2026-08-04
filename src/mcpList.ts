@@ -1,8 +1,8 @@
-import { relative } from "path";
-import { STATUSES } from "./constants.js";
-import { loadTasks } from "./specs/loadTasks.js";
+import { relative } from "node:path";
 import type { Status } from "./constants.js";
+import { STATUSES } from "./constants.js";
 import type { LoadTaskTier, TaskTier } from "./specs/loadTasks.js";
+import { loadTasks } from "./specs/loadTasks.js";
 
 const TASK_TIER_FILTERS = ["active", "completed", "archived", "all"] as const;
 
@@ -33,7 +33,7 @@ function isTaskStatus(value: string): value is Status {
 export function listTasksForMcp(
   specsTasksDir: string,
   cwd: string,
-  filters: McpListFilters = {}
+  filters: McpListFilters = {},
 ): McpTaskSummary[] {
   const tier: LoadTaskTier =
     filters.tier && isTaskTierFilter(filters.tier)

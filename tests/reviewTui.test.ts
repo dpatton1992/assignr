@@ -1,16 +1,22 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import React from "react";
 import { EventEmitter } from "node:events";
-import { render as inkTestRender, cleanup as inkTestingCleanup } from "ink-testing-library";
 import { render as inkRender } from "ink";
-import type { ReviewPacket, ReviewQueueRow, ReviewQueueSummary, ReviewDecisionId } from "../src/review/reviewPacket.js";
+import { cleanup as inkTestingCleanup, render as inkTestRender } from "ink-testing-library";
+import React from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReviewReadinessReport } from "../src/review/readiness.js";
-import type { ReviewActionOptions } from "../src/review/reviewActions.js";
-import type { ReviewService } from "../src/tui/service.js";
-import { ReviewTui } from "../src/tui/app.js";
+import type { ReviewActionOutcome } from "../src/review/reviewActions.js";
+import type {
+  ReviewDecisionId,
+  ReviewPacket,
+  ReviewQueueRow,
+  ReviewQueueSummary,
+} from "../src/review/reviewPacket.js";
+import type { TaskTier } from "../src/specs/loadTasks.js";
 import type { ReviewTuiSession } from "../src/tui/app.js";
-import { buildDiffContent, openInPager, resolvePagerCommand } from "../src/tui/pager.js";
+import { ReviewTui } from "../src/tui/app.js";
 import type { CommandRunner } from "../src/tui/pager.js";
+import { buildDiffContent, openInPager, resolvePagerCommand } from "../src/tui/pager.js";
+import type { ReviewService } from "../src/tui/service.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -57,7 +63,9 @@ function makePacket(overrides: Partial<ReviewPacket> & { taskId: string }): Revi
     worktree: { managed: false, workspacePath: ".", dirty: true },
     claimedScope: { allowedPaths: ["src/**"], forbiddenPaths: ["dist/**"] },
     changedFilesSource: "run-log",
-    changedPaths: [{ path: "src/example.ts", source: "run-log", inAllowedPaths: true, inForbiddenPaths: false }],
+    changedPaths: [
+      { path: "src/example.ts", source: "run-log", inAllowedPaths: true, inForbiddenPaths: false },
+    ],
     scopeDrift: {
       source: "run-log",
       changedPaths: ["src/example.ts"],
@@ -83,7 +91,11 @@ function makePacket(overrides: Partial<ReviewPacket> & { taskId: string }): Revi
     diffSummary: { changedFileCount: 1, source: "run-log", insertions: 3, deletions: 1 },
     availableDecisions: [
       { id: "approve", label: "Approve and move the task to completed", enabled: true },
-      { id: "request_changes", label: "Request changes and return the task to in_progress", enabled: true },
+      {
+        id: "request_changes",
+        label: "Request changes and return the task to in_progress",
+        enabled: true,
+      },
       { id: "reject", label: "Reject the task and move it to failed", enabled: true },
       { id: "block", label: "Block review and set the task to blocked", enabled: true },
     ],
@@ -92,7 +104,7 @@ function makePacket(overrides: Partial<ReviewPacket> & { taskId: string }): Revi
   return { ...base, ...overrides };
 }
 
-function row(taskId: string, status = "needs_review", tier = "active"): ReviewQueueRow {
+function row(taskId: string, status = "needs_review", tier: TaskTier = "active"): ReviewQueueRow {
   return { taskId, title: `Task ${taskId}`, status, tier, domain: "core", priority: "medium" };
 }
 
@@ -112,16 +124,14 @@ function makeQueue(opts: {
   };
 }
 
-const OUTCOME_MAP: Record<
-  ReviewDecisionId,
-  { outcome: "approved" | "changes_requested" | "rejected" | "reopened"; nextStatus: string }
-> = {
-  approve: { outcome: "approved", nextStatus: "complete" },
-  request_changes: { outcome: "changes_requested", nextStatus: "in_progress" },
-  reject: { outcome: "rejected", nextStatus: "failed" },
-  block: { outcome: "blocked", nextStatus: "blocked" },
-  reopen: { outcome: "reopened", nextStatus: "in_progress" },
-};
+const OUTCOME_MAP: Record<ReviewDecisionId, { outcome: ReviewActionOutcome; nextStatus: string }> =
+  {
+    approve: { outcome: "approved", nextStatus: "complete" },
+    request_changes: { outcome: "changes_requested", nextStatus: "in_progress" },
+    reject: { outcome: "rejected", nextStatus: "failed" },
+    block: { outcome: "blocked", nextStatus: "blocked" },
+    reopen: { outcome: "reopened", nextStatus: "in_progress" },
+  };
 
 class FakeReviewService implements ReviewService {
   queue: ReviewQueueSummary;
@@ -147,21 +157,30 @@ class FakeReviewService implements ReviewService {
     return packet;
   }
 
-  applyDecision(action: ReviewDecisionId, taskId: string, reason?: string): ReturnType<ReviewService["applyDecision"]> {
+  applyDecision(
+    action: ReviewDecisionId,
+    taskId: string,
+    reason?: string,
+  ): ReturnType<ReviewService["applyDecision"]> {
     this.applyDecisionCalls.push({ action, taskId, reason });
     const meta = OUTCOME_MAP[action];
     const previousStatus =
       action === "reopen"
         ? "complete"
-        : this.queue.needsReview.rows.find((candidate) => candidate.taskId === taskId)?.status ?? "needs_review";
-    const without = (rows: ReviewQueueRow[]): ReviewQueueRow[] => rows.filter((candidate) => candidate.taskId !== taskId);
+        : (this.queue.needsReview.rows.find((candidate) => candidate.taskId === taskId)?.status ??
+          "needs_review");
+    const without = (rows: ReviewQueueRow[]): ReviewQueueRow[] =>
+      rows.filter((candidate) => candidate.taskId !== taskId);
 
     if (action === "approve") {
       const source = this.queue.needsReview.rows.find((candidate) => candidate.taskId === taskId);
       this.queue.needsReview.rows = without(this.queue.needsReview.rows);
       this.queue.needsReview.count = this.queue.needsReview.rows.length;
       if (source) {
-        this.queue.completed.rows = [...this.queue.completed.rows, { ...source, status: "complete" }];
+        this.queue.completed.rows = [
+          ...this.queue.completed.rows,
+          { ...source, status: "complete" },
+        ];
         this.queue.completed.count = this.queue.completed.rows.length;
       }
     } else if (action === "reopen") {
@@ -184,7 +203,7 @@ class FakeReviewService implements ReviewService {
 
 function renderTui(
   fake: FakeReviewService,
-  options: { session?: ReviewTuiSession; windowHeight?: number; diffRunner?: CommandRunner } = {}
+  options: { session?: ReviewTuiSession; windowHeight?: number; diffRunner?: CommandRunner } = {},
 ) {
   const onOpenPager = vi.fn();
   const rendered = inkTestRender(
@@ -195,7 +214,7 @@ function renderTui(
       ...(options.session ? { session: options.session } : {}),
       ...(options.windowHeight !== undefined ? { windowHeight: options.windowHeight } : {}),
       ...(options.diffRunner ? { diffRunner: options.diffRunner } : {}),
-    })
+    }),
   );
   return { ...rendered, onOpenPager };
 }
@@ -224,7 +243,10 @@ afterEach(() => {
 
 describe("resolvePagerCommand", () => {
   it("splits a configured PAGER into a command and argument array", () => {
-    expect(resolvePagerCommand({ PAGER: "less -R -F" })).toEqual({ command: "less", args: ["-R", "-F"] });
+    expect(resolvePagerCommand({ PAGER: "less -R -F" })).toEqual({
+      command: "less",
+      args: ["-R", "-F"],
+    });
   });
 
   it("defaults to less -R when no pager is configured", () => {
@@ -240,14 +262,28 @@ describe("buildDiffContent", () => {
       if (args[0] === "status") {
         return { status: 0, stdout: "?? src/new-file.ts\n", stderr: "" };
       }
-      return { status: 0, stdout: "diff --git a/src/example.ts b/src/example.ts\n+added\n-removed\n", stderr: "" };
+      return {
+        status: 0,
+        stdout: "diff --git a/src/example.ts b/src/example.ts\n+added\n-removed\n",
+        stderr: "",
+      };
     };
 
     const packet = makePacket({
       taskId: "alpha",
       changedPaths: [
-        { path: "src/example.ts", source: "run-log", inAllowedPaths: true, inForbiddenPaths: false },
-        { path: "src/other.ts", source: "git-status", inAllowedPaths: true, inForbiddenPaths: false },
+        {
+          path: "src/example.ts",
+          source: "run-log",
+          inAllowedPaths: true,
+          inForbiddenPaths: false,
+        },
+        {
+          path: "src/other.ts",
+          source: "git-status",
+          inAllowedPaths: true,
+          inForbiddenPaths: false,
+        },
       ],
     });
 
@@ -348,7 +384,7 @@ describe("ReviewTui rendering", () => {
         blocked: [row("gamma", "blocked")],
         completed: [row("done", "complete", "completed")],
       }),
-      []
+      [],
     );
     const { lastFrame } = renderTui(fake);
     await tick();
@@ -405,7 +441,11 @@ describe("ReviewTui rendering", () => {
         hasVerificationReceipt: true,
         verificationReceipt: "verify receipt text",
       },
-      workerNotes: { decisionsMade: ["Decision A", "Decision B"], followUps: ["Follow-up"], risks: "none" },
+      workerNotes: {
+        decisionsMade: ["Decision A", "Decision B"],
+        followUps: ["Follow-up"],
+        risks: "none",
+      },
     });
     const fake = new FakeReviewService(makeQueue({ needsReview: [row("alpha")] }), [packet]);
     const { lastFrame, stdin } = renderTui(fake, { windowHeight: 40 });
@@ -438,8 +478,15 @@ describe("ReviewTui rendering", () => {
 describe("ReviewTui navigation", () => {
   function navQueue(): FakeReviewService {
     return new FakeReviewService(
-      makeQueue({ needsReview: [row("alpha"), row("beta")], completed: [row("done", "complete", "completed")] }),
-      [makePacket({ taskId: "alpha" }), makePacket({ taskId: "beta" }), makePacket({ taskId: "done", status: "complete", tier: "completed" })]
+      makeQueue({
+        needsReview: [row("alpha"), row("beta")],
+        completed: [row("done", "complete", "completed")],
+      }),
+      [
+        makePacket({ taskId: "alpha" }),
+        makePacket({ taskId: "beta" }),
+        makePacket({ taskId: "done", status: "complete", tier: "completed" }),
+      ],
     );
   }
 
@@ -525,9 +572,11 @@ describe("ReviewTui confirmations and reasons", () => {
           taskId: "done",
           status: "complete",
           tier: "completed",
-          availableDecisions: [{ id: "reopen", label: "Reopen the task to in_progress", enabled: true }],
+          availableDecisions: [
+            { id: "reopen", label: "Reopen the task to in_progress", enabled: true },
+          ],
         }),
-      ]
+      ],
     );
   }
 
@@ -670,7 +719,11 @@ describe("ReviewTui pager invocation", () => {
       if (args[0] === "status") {
         return { status: 0, stdout: "?? src/new-file.ts\n", stderr: "" };
       }
-      return { status: 0, stdout: "diff --git a/src/example.ts b/src/example.ts\n+added\n", stderr: "" };
+      return {
+        status: 0,
+        stdout: "diff --git a/src/example.ts b/src/example.ts\n+added\n",
+        stderr: "",
+      };
     };
     const fake = new FakeReviewService(makeQueue({ needsReview: [row("alpha")] }), [
       makePacket({ taskId: "alpha" }),
@@ -692,9 +745,18 @@ describe("ReviewTui pager invocation", () => {
   });
 
   it("r opens a long raw receipt through the pager", async () => {
-    const longReceipt = Array.from({ length: 80 }, (_, index) => `receipt line ${index}`).join("\n");
+    const longReceipt = Array.from({ length: 80 }, (_, index) => `receipt line ${index}`).join(
+      "\n",
+    );
     const fake = new FakeReviewService(makeQueue({ needsReview: [row("alpha")] }), [
-      makePacket({ taskId: "alpha", receipt: { result: "complete", hasVerificationReceipt: true, verificationReceipt: longReceipt } }),
+      makePacket({
+        taskId: "alpha",
+        receipt: {
+          result: "complete",
+          hasVerificationReceipt: true,
+          verificationReceipt: longReceipt,
+        },
+      }),
     ]);
     const { lastFrame, stdin, onOpenPager } = renderTui(fake);
     await tick();
@@ -722,7 +784,10 @@ describe("ReviewTui pager invocation", () => {
 
   it("t shows test and command evidence and g shows dependency context", async () => {
     const fake = new FakeReviewService(makeQueue({ needsReview: [row("alpha")] }), [
-      makePacket({ taskId: "alpha", dependencies: [{ taskId: "dep-task", status: "complete", complete: true }] }),
+      makePacket({
+        taskId: "alpha",
+        dependencies: [{ taskId: "dep-task", status: "complete", complete: true }],
+      }),
     ]);
     const { lastFrame, stdin } = renderTui(fake);
     await tick();
@@ -742,14 +807,19 @@ describe("ReviewTui pager invocation", () => {
 
 describe("ReviewTui narrow terminals and scroll", () => {
   it("renders and stays navigable in a narrow terminal", async () => {
-    const fake = new FakeReviewService(
-      makeQueue({ needsReview: [row("alpha"), row("beta")] }),
-      [makePacket({ taskId: "alpha" }), makePacket({ taskId: "beta" })]
-    );
+    const fake = new FakeReviewService(makeQueue({ needsReview: [row("alpha"), row("beta")] }), [
+      makePacket({ taskId: "alpha" }),
+      makePacket({ taskId: "beta" }),
+    ]);
     const onOpenPager = vi.fn();
     const { instance, stdout, stdin } = renderNarrow(
-      React.createElement(ReviewTui, { service: fake, cwd: FAKE_CWD, onOpenPager, windowHeight: 4 }),
-      24
+      React.createElement(ReviewTui, {
+        service: fake,
+        cwd: FAKE_CWD,
+        onOpenPager,
+        windowHeight: 4,
+      }),
+      24,
     );
     await tick();
 
@@ -872,6 +942,13 @@ function renderNarrow(ui: React.ReactElement, columns: number) {
   const stdout = createFakeStream(columns);
   const stderr = createFakeStream(columns);
   const stdin = createFakeStdin();
-  const instance = inkRender(ui, { stdout, stderr, stdin, debug: true, exitOnCtrlC: false, patchConsole: false });
+  const instance = inkRender(ui, {
+    stdout: stdout as unknown as NodeJS.WriteStream,
+    stderr: stderr as unknown as NodeJS.WriteStream,
+    stdin: stdin as unknown as NodeJS.ReadStream,
+    debug: true,
+    exitOnCtrlC: false,
+    patchConsole: false,
+  });
   return { instance, stdout, stdin };
 }

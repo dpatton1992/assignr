@@ -15,9 +15,9 @@
  *   1  tag is missing, malformed, unreadable, or mismatched
  *      (a useful diagnostic is written to stderr)
  */
-import { spawnSync } from "child_process";
-import { fileURLToPath } from "url";
-import { resolve } from "path";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const TAG_PATTERN =
   /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
@@ -44,7 +44,9 @@ function git(args: string[], cwd: string): string {
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (result.error || result.status !== 0) {
-    throw new Error(result.stderr?.trim() || result.error?.message || `git ${args.join(" ")} failed`);
+    throw new Error(
+      result.stderr?.trim() || result.error?.message || `git ${args.join(" ")} failed`,
+    );
   }
   return result.stdout.trim();
 }
@@ -67,7 +69,10 @@ export function parseTagVersion(tag: string): string {
  * Checks the invariant for one tag. Never mutates the repository: this is a
  * read-only verification and reports mismatches instead of rewriting tags.
  */
-export function checkReleaseTagVersion(tag: string, options: { cwd?: string } = {}): TagCheckOutcome {
+export function checkReleaseTagVersion(
+  tag: string,
+  options: { cwd?: string } = {},
+): TagCheckOutcome {
   const cwd = options.cwd ?? process.cwd();
 
   let version: string;
@@ -158,7 +163,9 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   return 1;
 }
 
-const invokedDirectly = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
+const invokedDirectly = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
 if (invokedDirectly) {
   process.exitCode = main();
 }

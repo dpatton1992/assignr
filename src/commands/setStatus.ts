@@ -1,18 +1,18 @@
-import type { Status } from "../constants.js";
-import { loadConfig } from "../config.js";
-import { getPaths } from "../utils/paths.js";
-import { colorForStatus } from "../utils/styling.js";
 import picocolors from "picocolors";
+import { loadConfig } from "../config.js";
+import type { Status } from "../constants.js";
 import {
   setTaskStatus as setTaskStatusService,
   setTaskStatusWithLifecycle,
 } from "../lifecycle/taskLifecycleService.js";
+import { getPaths } from "../utils/paths.js";
+import { colorForStatus } from "../utils/styling.js";
 
 export function setStatusCommand(
   taskId: string,
   newStatus: Status,
   specsTasksDir: string,
-  cwd: string
+  cwd: string,
 ): void {
   let paths: ReturnType<typeof getPaths>;
   try {
@@ -27,7 +27,7 @@ export function setStatusCommand(
   const result = setTaskStatusWithLifecycle(taskId, newStatus, {
     specsTasksDir,
     controlRepo: cwd,
-    worktreesDir: paths!.worktrees,
+    worktreesDir: paths?.worktrees,
   });
   if (!result.ok) {
     console.error(result.message ?? "Task status update failed.");
@@ -35,8 +35,8 @@ export function setStatusCommand(
     return;
   }
   console.log(
-    `Updated: ${result.updatedPath.replace(cwd + "/", "")}\n` +
-      `  ${colorForStatus(result.previousStatus)(result.previousStatus)} ${picocolors.yellow("→")} ${colorForStatus(result.newStatus)(result.newStatus)}`
+    `Updated: ${result.updatedPath.replace(`${cwd}/`, "")}\n` +
+      `  ${colorForStatus(result.previousStatus)(result.previousStatus)} ${picocolors.yellow("→")} ${colorForStatus(result.newStatus)(result.newStatus)}`,
   );
 }
 

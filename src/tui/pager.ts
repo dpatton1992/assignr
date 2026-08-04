@@ -1,5 +1,5 @@
-import { spawnSync, spawn } from "child_process";
-import { resolve } from "path";
+import { spawn, spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import type { ReviewPacket } from "../review/reviewPacket.js";
 
 /**
@@ -43,12 +43,8 @@ export interface DiffContext {
  */
 export function buildDiffContent(context: DiffContext): string {
   const { packet, cwd, run = defaultCommandRunner } = context;
-  const evidenceCwd = packet.worktree?.managed
-    ? resolve(cwd, packet.worktree.workspacePath)
-    : cwd;
-  const diffBase = packet.worktree?.managed
-    ? packet.worktree.baseSha ?? "HEAD"
-    : "HEAD";
+  const evidenceCwd = packet.worktree?.managed ? resolve(cwd, packet.worktree.workspacePath) : cwd;
+  const diffBase = packet.worktree?.managed ? (packet.worktree.baseSha ?? "HEAD") : "HEAD";
   const paths = packet.changedPaths
     .map((changed) => changed.path)
     .filter((path) => path.length > 0 && !path.includes("\0"));
@@ -61,7 +57,11 @@ export function buildDiffContent(context: DiffContext): string {
     return sections.join("\n\n");
   }
 
-  const statusResult = run("git", ["status", "--porcelain", "--untracked-files=all", "--", ...paths], evidenceCwd);
+  const statusResult = run(
+    "git",
+    ["status", "--porcelain", "--untracked-files=all", "--", ...paths],
+    evidenceCwd,
+  );
   const untracked = statusResult.stdout
     .split("\n")
     .filter((line) => line.startsWith("?? "))
@@ -70,7 +70,7 @@ export function buildDiffContent(context: DiffContext): string {
 
   if (untracked.length > 0) {
     sections.push(
-      `Untracked paths (not shown in git diff):\n${untracked.map((path) => `  ${path}`).join("\n")}`
+      `Untracked paths (not shown in git diff):\n${untracked.map((path) => `  ${path}`).join("\n")}`,
     );
   }
 
@@ -79,7 +79,7 @@ export function buildDiffContent(context: DiffContext): string {
   sections.push(
     diff
       ? `Diff for ${paths.length} changed path(s):\n\n${diff}`
-      : "No tracked diff for the packet's changed paths."
+      : "No tracked diff for the packet's changed paths.",
   );
 
   return sections.join("\n\n");
@@ -91,7 +91,9 @@ export function buildDiffContent(context: DiffContext): string {
  * argument array. When no pager is configured the documented fallback chain
  * starts with `less` and falls back to inline output if spawning fails.
  */
-export function resolvePagerCommand(env: NodeJS.ProcessEnv): { command: string; args: string[] } | null {
+export function resolvePagerCommand(
+  env: NodeJS.ProcessEnv,
+): { command: string; args: string[] } | null {
   const configured = env.PAGER?.trim();
   if (configured) {
     const parts = configured.split(/\s+/).filter(Boolean);
@@ -102,7 +104,11 @@ export function resolvePagerCommand(env: NodeJS.ProcessEnv): { command: string; 
   return { command: "less", args: ["-R"] };
 }
 
-export type PagerSpawner = (command: string, args: string[], input: string) => Promise<number | null>;
+export type PagerSpawner = (
+  command: string,
+  args: string[],
+  input: string,
+) => Promise<number | null>;
 
 /**
  * Spawn the pager with the content piped to its stdin. The Ink app must be
@@ -110,7 +116,11 @@ export type PagerSpawner = (command: string, args: string[], input: string) => P
  * while the pager owns the screen. Resolves null when the pager could not be
  * started (e.g. ENOENT) so callers can use the documented fallback.
  */
-export function defaultPagerSpawn(command: string, args: string[], input: string): Promise<number | null> {
+export function defaultPagerSpawn(
+  command: string,
+  args: string[],
+  input: string,
+): Promise<number | null> {
   return new Promise((resolve) => {
     let settled = false;
     const child = spawn(command, args, { stdio: ["pipe", "inherit", "inherit"] });
@@ -148,7 +158,10 @@ export interface OpenInPagerOptions {
  * (already restored) terminal so the user is never stranded without the
  * content.
  */
-export async function openInPager(content: string, options: OpenInPagerOptions = {}): Promise<void> {
+export async function openInPager(
+  content: string,
+  options: OpenInPagerOptions = {},
+): Promise<void> {
   const env = options.env ?? process.env;
   const resolved = resolvePagerCommand(env);
   const writeFallback = (): void => {

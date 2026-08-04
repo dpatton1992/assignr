@@ -1,15 +1,15 @@
-import { describe, it, expect } from "vitest";
-import {
-  renderTemplate,
-  IMPLEMENTATION_TEMPLATE,
-  REVIEW_TEMPLATE,
-} from "../src/templates/renderTemplate.js";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
 import { buildTaskPacket } from "../src/commands/taskPacket.js";
 import type { TaskSpec } from "../src/specs/schema.js";
-import { mkdtemp } from "fs/promises";
-import { mkdirSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import {
+  IMPLEMENTATION_TEMPLATE,
+  REVIEW_TEMPLATE,
+  renderTemplate,
+} from "../src/templates/renderTemplate.js";
 
 const spec: TaskSpec = {
   id: "license-expiration-reminders",
@@ -19,6 +19,14 @@ const spec: TaskSpec = {
   domain: "credentialing",
   priority: "high",
   depends_on: ["license-data-model"],
+  blocks: [],
+  conflicts_with: [],
+  can_run_independently: true,
+  path_ownership: {
+    touched_paths: [],
+    locked_paths: [],
+    unsafe_parallel_areas: [],
+  },
   allowed_paths: ["src/features/licenses/**"],
   forbidden_paths: ["src/auth/**"],
   goal: "Add expiration reminder support for provider licenses.",
@@ -145,7 +153,7 @@ describe("renderTemplate", () => {
           "  - Skip full prompt prose.",
           "",
         ].join("\n"),
-        "utf-8"
+        "utf-8",
       );
 
       const packet = buildTaskPacket({

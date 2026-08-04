@@ -1,6 +1,6 @@
-import { relative } from "path";
-import { loadTasks, pathOwnershipWarningsForTask } from "../specs/loadTasks.js";
+import { relative } from "node:path";
 import type { PathOwnershipWarning } from "../specs/loadTasks.js";
+import { loadTasks, pathOwnershipWarningsForTask } from "../specs/loadTasks.js";
 import type { TaskSpec } from "../specs/schema.js";
 
 export interface TaskPacket {

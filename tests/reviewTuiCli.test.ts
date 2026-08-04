@@ -1,17 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { existsSync, mkdtempSync, rmSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { spawnSync } from "child_process";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Command } from "commander";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initCommand } from "../src/commands/init.js";
 import { newCommand } from "../src/commands/new.js";
-import { setStatusCommand } from "../src/commands/setStatus.js";
-import { dispatchBareReview, registerReviewCommands } from "../src/commands/review.js";
 import type { BareReviewDispatch } from "../src/commands/review.js";
-import { getPaths } from "../src/utils/paths.js";
+import { dispatchBareReview, registerReviewCommands } from "../src/commands/review.js";
+import { setStatusCommand } from "../src/commands/setStatus.js";
 import { reviewPromptFilename } from "../src/templates/renderTemplate.js";
+import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
@@ -21,7 +21,7 @@ function runCli(args: string[], options: { timeout?: number } = {}) {
     process.cwd(),
     "node_modules",
     ".bin",
-    process.platform === "win32" ? "tsx.cmd" : "tsx"
+    process.platform === "win32" ? "tsx.cmd" : "tsx",
   );
   return spawnSync(tsxBin, [join(process.cwd(), "src", "cli.ts"), ...args], {
     cwd,
@@ -69,7 +69,7 @@ describe("dispatchBareReview", () => {
   });
 
   it("launches the TUI with the scoped paths and cwd when stdout is a TTY", () => {
-    const launchTui = vi.fn((paths: unknown, dir: string) => `tui:${dir}`);
+    const launchTui = vi.fn((_paths: unknown, dir: string) => `tui:${dir}`);
     const showHelp = vi.fn();
     const dispatch: BareReviewDispatch = { isTty: true, launchTui, showHelp };
 
@@ -176,7 +176,9 @@ describe("existing review subcommands keep their behavior", () => {
     const queue = runCli(["review", "queue", "--json"]);
     expect(queue.status).toBe(0);
     const queueJson = JSON.parse(queue.stdout);
-    expect(queueJson.needsReview.rows.map((row: { taskId: string }) => row.taskId)).toContain(taskId);
+    expect(queueJson.needsReview.rows.map((row: { taskId: string }) => row.taskId)).toContain(
+      taskId,
+    );
 
     const packet = runCli(["review", "packet", taskId, "--json"]);
     expect(packet.status).toBe(0);

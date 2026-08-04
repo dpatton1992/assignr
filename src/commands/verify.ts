@@ -1,20 +1,11 @@
-import { spawn } from "child_process";
+import { spawn } from "node:child_process";
 
 export const VERIFY_PROFILE_NAMES = ["coordinator", "worker", "review"] as const;
 export type VerifyProfile = (typeof VERIFY_PROFILE_NAMES)[number];
 
 export const VERIFY_PROFILES: Record<VerifyProfile, readonly string[]> = {
-  coordinator: [
-    "pnpm typecheck",
-    "pnpm test -- coordinator",
-    "pnpm test -- mcpList",
-  ],
-  worker: [
-    "pnpm typecheck",
-    "pnpm test -- verify",
-    "pnpm test -- runLog",
-    "pnpm test -- mcpList",
-  ],
+  coordinator: ["pnpm typecheck", "pnpm test -- coordinator", "pnpm test -- mcpList"],
+  worker: ["pnpm typecheck", "pnpm test -- verify", "pnpm test -- runLog", "pnpm test -- mcpList"],
   review: [
     "pnpm typecheck",
     "pnpm test -- reviewCheck",
@@ -66,7 +57,9 @@ export function parseVerifyProfile(profile: string): VerifyProfile {
     return profile as VerifyProfile;
   }
 
-  throw new Error(`Unknown verify profile: "${profile}". Allowed: ${VERIFY_PROFILE_NAMES.join(", ")}`);
+  throw new Error(
+    `Unknown verify profile: "${profile}". Allowed: ${VERIFY_PROFILE_NAMES.join(", ")}`,
+  );
 }
 
 function compactStream(value: string): { value?: string; truncated: boolean } {
@@ -139,7 +132,7 @@ export async function runVerifyProfile(
   options: {
     cwd: string;
     runner?: VerifyCommandRunner;
-  }
+  },
 ): Promise<VerifyReceipt> {
   const runner = options.runner ?? shellCommandRunner;
   const commands = VERIFY_PROFILES[profile];

@@ -1,6 +1,6 @@
-import { spawnSync } from "child_process";
-import { resolve } from "path";
-import { fileURLToPath } from "url";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const args = process.argv
   .slice(2)

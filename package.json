@@ -1,82 +1,85 @@
 {
-	"name": "manciple",
-	"version": "0.4.9",
-	"description": "A repo-native workflow layer for existing coding agents.",
-	"license": "MIT",
-	"author": "Daniel Patton",
-	"homepage": "https://github.com/dpatton1992/manciple#readme",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/dpatton1992/manciple.git"
-	},
-	"bugs": {
-		"url": "https://github.com/dpatton1992/manciple/issues"
-	},
-	"preferGlobal": true,
-	"type": "module",
-	"engines": {
-		"node": ">=18.0.0"
-	},
-	"files": [
-		"bin/",
-		"dist/",
-		"docs/",
-		"README.md",
-		"scripts/manciple-token-audit.mjs",
-		".codex/skills/",
-		".claude/skills/",
-		".opencode/agents/"
-	],
-	"keywords": [
-		"manciple",
-		"ai",
-		"agents",
-		"coding-agents",
-		"llm",
-		"workflow",
-		"prompt-engineering",
-		"task-management",
-		"cli"
-	],
-	"publishConfig": {
-		"access": "public"
-	},
-	"bin": {
-		"manciple": "bin/manciple.js",
-		"manciple-mcp": "bin/manciple-mcp.js"
-	},
-	"scripts": {
-		"build": "tsc",
-		"dev": "tsx src/cli.ts",
-		"release": "tsx scripts/release.ts",
-		"format:yaml": "tsx scripts/formatMancipleYaml.ts",
-		"check:manciple-yaml": "tsx scripts/formatMancipleYaml.ts --check",
-		"check:manciple-lifecycle": "tsx scripts/checkMancipleLifecycle.ts",
-		"lint": "pnpm run check:manciple-yaml && pnpm run typecheck",
-		"test": "NO_COLOR=1 tsx scripts/runVitest.ts --silent",
-		"test:verbose": "NO_COLOR=1 tsx scripts/runVitest.ts",
-		"test:watch": "vitest",
-		"typecheck": "tsc --noEmit",
-		"prepublishOnly": "pnpm run lint && pnpm run build && pnpm run test"
-	},
-	"dependencies": {
-		"@modelcontextprotocol/sdk": "^1.29.0",
-		"commander": "^12.1.0",
-		"fs-extra": "^11.2.0",
-		"ink": "^5.2.1",
-		"picocolors": "^1.1.1",
-		"react": "^18.3.1",
-		"yaml": "^2.7.0",
-		"zod": "^3.24.1"
-	},
-	"devDependencies": {
-		"@types/fs-extra": "^11.0.4",
-		"@types/node": "^22.0.0",
-		"@types/react": "^18.3.31",
-		"ink-testing-library": "^4.0.0",
-		"tsx": "^4.19.0",
-		"typescript": "^5.7.0",
-		"vitest": "^3.2.6"
-	},
-	"packageManager": "pnpm@11.20.0+sha256.34e198cb1e43237517ecedfd31f9ae26a6c0a3e5366ce58a2d05f4b21fb5f19a"
+  "name": "manciple",
+  "version": "0.4.9",
+  "description": "A repo-native workflow layer for existing coding agents.",
+  "license": "MIT",
+  "author": "Daniel Patton",
+  "homepage": "https://github.com/dpatton1992/manciple#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dpatton1992/manciple.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dpatton1992/manciple/issues"
+  },
+  "preferGlobal": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "docs/",
+    "README.md",
+    "scripts/manciple-token-audit.mjs",
+    ".codex/skills/",
+    ".claude/skills/",
+    ".opencode/agents/"
+  ],
+  "keywords": [
+    "manciple",
+    "ai",
+    "agents",
+    "coding-agents",
+    "llm",
+    "workflow",
+    "prompt-engineering",
+    "task-management",
+    "cli"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "manciple": "bin/manciple.js",
+    "manciple-mcp": "bin/manciple-mcp.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/cli.ts",
+    "release": "tsx scripts/release.ts",
+    "format": "biome format --write .",
+    "format:yaml": "tsx scripts/formatMancipleYaml.ts",
+    "check:format": "biome check .",
+    "check:manciple-yaml": "tsx scripts/formatMancipleYaml.ts --check",
+    "check:manciple-lifecycle": "tsx scripts/checkMancipleLifecycle.ts",
+    "lint": "pnpm run check:manciple-yaml && pnpm run check:format && pnpm run typecheck",
+    "test": "NO_COLOR=1 tsx scripts/runVitest.ts --silent",
+    "test:verbose": "NO_COLOR=1 tsx scripts/runVitest.ts",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run lint && pnpm run build && pnpm run test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "commander": "^12.1.0",
+    "fs-extra": "^11.2.0",
+    "ink": "^5.2.1",
+    "picocolors": "^1.1.1",
+    "react": "^18.3.1",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.6",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.31",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.6"
+  },
+  "packageManager": "pnpm@11.20.0+sha256.34e198cb1e43237517ecedfd31f9ae26a6c0a3e5366ce58a2d05f4b21fb5f19a"
 }

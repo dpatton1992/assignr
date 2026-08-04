@@ -2,8 +2,8 @@ import type {
   EdgeType,
   GraphEdge,
   GraphTaskNode,
-  TaskGraphPacket,
   ReceiptHealth,
+  TaskGraphPacket,
 } from "../graph/taskGraphPacket.js";
 
 /**
@@ -26,7 +26,12 @@ export const LENS_LABELS: Record<GraphLens, string> = {
   status: "Status",
 };
 
-export const EDGE_TYPE_ORDER: EdgeType[] = ["depends_on", "blocks", "conflicts_with", "ownership_overlap"];
+export const EDGE_TYPE_ORDER: EdgeType[] = [
+  "depends_on",
+  "blocks",
+  "conflicts_with",
+  "ownership_overlap",
+];
 
 export const EDGE_TYPE_LABELS: Record<EdgeType, string> = {
   depends_on: "depends_on",
@@ -159,7 +164,7 @@ export function computeLayout(packet: TaskGraphPacket, focusTask?: string): Grap
 
   const minLayer = packet.nodes.reduce(
     (min, node) => Math.min(min, layer.get(node.taskId) ?? 0),
-    0
+    0,
   );
   const columnOf = new Map<string, number>();
   for (const node of packet.nodes) {
@@ -328,7 +333,7 @@ export function receiptColor(health: ReceiptHealth): string {
 export type OwnershipSeverityLabel = "LOCKED" | "UNSAFE" | "touched" | "allowed";
 
 export function ownershipSeverityLabel(
-  kind: "allowed" | "touched" | "locked" | "unsafe_parallel_area"
+  kind: "allowed" | "touched" | "locked" | "unsafe_parallel_area",
 ): OwnershipSeverityLabel {
   switch (kind) {
     case "locked":

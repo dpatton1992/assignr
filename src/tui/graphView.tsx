@@ -1,17 +1,23 @@
-import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
+import type React from "react";
+import { useEffect, useMemo, useState } from "react";
+import type {
+  EdgeType,
+  GraphTaskTier,
+  TaskGraphOptions,
+  TaskGraphPacket,
+} from "../graph/taskGraphPacket.js";
 import { TaskGraphError } from "../graph/taskGraphPacket.js";
-import type { EdgeType, TaskGraphPacket, GraphTaskTier, TaskGraphOptions } from "../graph/taskGraphPacket.js";
-import type { GraphService } from "./graphService.js";
+import type { GraphLayout, GraphLens, PlacedNode } from "./graphLayout.js";
 import {
+  computeLayout,
+  downstreamNeighbors,
   EDGE_GLYPHS,
   EDGE_TYPE_LABELS,
   EDGE_TYPE_ORDER,
   LENS_EMPHASIZED_EDGES,
   LENS_LABELS,
   LENS_ORDER,
-  computeLayout,
-  downstreamNeighbors,
   ownershipSeverityLabel,
   receiptColor,
   receiptHealthCounts,
@@ -20,7 +26,7 @@ import {
   truncate,
   upstreamNeighbors,
 } from "./graphLayout.js";
-import type { GraphLayout, GraphLens, PlacedNode } from "./graphLayout.js";
+import type { GraphService } from "./graphService.js";
 
 /**
  * GraphView is the interactive task-graph overlay of the review TUI.
@@ -72,18 +78,19 @@ function depthLabel(depth: number): string {
 }
 
 function buildHeaderLines(state: GraphViewState, packet: TaskGraphPacket): ViewLine[] {
-  const filters = [
-    state.statusFilter ? `status:${state.statusFilter}` : null,
-    state.domainFilter ? `domain:${state.domainFilter}` : null,
-    state.tierFilter !== "all" ? `tier:${state.tierFilter}` : null,
-    state.edgeTypeFilter !== "all" ? `edges:${state.edgeTypeFilter}` : null,
-  ]
-    .filter((value): value is string => value !== null)
-    .join(" ") || "none";
+  const filters =
+    [
+      state.statusFilter ? `status:${state.statusFilter}` : null,
+      state.domainFilter ? `domain:${state.domainFilter}` : null,
+      state.tierFilter !== "all" ? `tier:${state.tierFilter}` : null,
+      state.edgeTypeFilter !== "all" ? `edges:${state.edgeTypeFilter}` : null,
+    ]
+      .filter((value): value is string => value !== null)
+      .join(" ") || "none";
   return [
     {
       text: `Task Graph — focus: ${state.focusTask} — ${LENS_LABELS[state.lens]} — depth ${depthLabel(
-        state.depth
+        state.depth,
       )} — ${state.allActive ? "all-active" : "focus"}`,
       bold: true,
     },
@@ -98,7 +105,11 @@ function buildHeaderLines(state: GraphViewState, packet: TaskGraphPacket): ViewL
   ];
 }
 
-function buildWideGrid(layout: GraphLayout, selectedId: string | null, focusTask: string): ViewLine[] {
+function buildWideGrid(
+  layout: GraphLayout,
+  selectedId: string | null,
+  focusTask: string,
+): ViewLine[] {
   const { placed, columnCount, maxRows, byId } = layout;
   if (placed.length === 0) {
     return [{ text: "No tasks match the current filters.", dim: true }];
@@ -140,7 +151,9 @@ function buildWideGrid(layout: GraphLayout, selectedId: string | null, focusTask
     const idCells: string[] = [];
     const badgeCells: string[] = [];
     for (let column = 0; column < columnCount; column += 1) {
-      const entry = placed.find((candidate) => candidate.column === column && candidate.row === row);
+      const entry = placed.find(
+        (candidate) => candidate.column === column && candidate.row === row,
+      );
       idCells.push(entry ? nodeLine(entry).padEnd(widths[column]) : "".padEnd(widths[column]));
       badgeCells.push(entry ? badgeLine(entry).padEnd(widths[column]) : "".padEnd(widths[column]));
     }
@@ -193,7 +206,11 @@ function buildEdgeLines(layout: GraphLayout, lens: GraphLens): ViewLine[] {
   return lines;
 }
 
-function buildNarrowList(layout: GraphLayout, selectedId: string | null, focusTask: string): ViewLine[] {
+function buildNarrowList(
+  layout: GraphLayout,
+  selectedId: string | null,
+  focusTask: string,
+): ViewLine[] {
   const selected = selectedId ? layout.byId.get(selectedId) : undefined;
   if (!selected) {
     return [{ text: "No tasks match the current filters.", dim: true }];
@@ -211,7 +228,9 @@ function buildNarrowList(layout: GraphLayout, selectedId: string | null, focusTa
       const typeA = EDGE_TYPE_ORDER.indexOf(a.edge.type);
       const typeB = EDGE_TYPE_ORDER.indexOf(b.edge.type);
       if (typeA !== typeB) return typeA - typeB;
-      return a.edge.source.localeCompare(b.edge.source) || a.edge.target.localeCompare(b.edge.target);
+      return (
+        a.edge.source.localeCompare(b.edge.source) || a.edge.target.localeCompare(b.edge.target)
+      );
     });
   for (const entry of incident) {
     const { edge } = entry;
@@ -234,7 +253,11 @@ function buildNarrowList(layout: GraphLayout, selectedId: string | null, focusTa
   return lines;
 }
 
-function buildWarningLines(packet: TaskGraphPacket, layout: GraphLayout, lens: GraphLens): ViewLine[] {
+function buildWarningLines(
+  packet: TaskGraphPacket,
+  layout: GraphLayout,
+  lens: GraphLens,
+): ViewLine[] {
   const lines: ViewLine[] = [];
   switch (lens) {
     case "dependencies": {
@@ -247,9 +270,13 @@ function buildWarningLines(packet: TaskGraphPacket, layout: GraphLayout, lens: G
         });
       }
       if (layout.dangling.length > 0) {
-        lines.push({ text: `⚠ dangling reference(s): ${layout.dangling.join(", ")}`, color: "yellow" });
+        lines.push({
+          text: `⚠ dangling reference(s): ${layout.dangling.join(", ")}`,
+          color: "yellow",
+        });
       }
-      if (lines.length === 0) lines.push({ text: "no cycle or dangling-reference warnings", dim: true });
+      if (lines.length === 0)
+        lines.push({ text: "no cycle or dangling-reference warnings", dim: true });
       break;
     }
     case "ownership": {
@@ -279,21 +306,36 @@ function buildWarningLines(packet: TaskGraphPacket, layout: GraphLayout, lens: G
     }
     case "receipts": {
       const counts = receiptHealthCounts(packet);
-      const failing = packet.nodes.filter((node) => node.receipt.health === "failing").map((node) => node.taskId);
-      const missing = packet.nodes.filter((node) => node.receipt.health === "missing").map((node) => node.taskId);
+      const failing = packet.nodes
+        .filter((node) => node.receipt.health === "failing")
+        .map((node) => node.taskId);
+      const missing = packet.nodes
+        .filter((node) => node.receipt.health === "missing")
+        .map((node) => node.taskId);
       if (counts.failing > 0) {
-        lines.push({ text: `⚠ ${counts.failing} failing receipt(s): ${failing.join(", ")}`, color: "red" });
+        lines.push({
+          text: `⚠ ${counts.failing} failing receipt(s): ${failing.join(", ")}`,
+          color: "red",
+        });
       }
       if (counts.missing > 0) {
-        lines.push({ text: `⚠ ${counts.missing} missing receipt(s): ${missing.join(", ")}`, color: "yellow" });
+        lines.push({
+          text: `⚠ ${counts.missing} missing receipt(s): ${missing.join(", ")}`,
+          color: "yellow",
+        });
       }
       if (lines.length === 0) lines.push({ text: "no failing or missing receipts", dim: true });
       break;
     }
     case "status": {
-      const blocked = packet.nodes.filter((node) => node.status === "blocked").map((node) => node.taskId);
+      const blocked = packet.nodes
+        .filter((node) => node.status === "blocked")
+        .map((node) => node.taskId);
       if (blocked.length > 0) {
-        lines.push({ text: `⚠ ${blocked.length} blocked task(s): ${blocked.join(", ")}`, color: "red" });
+        lines.push({
+          text: `⚠ ${blocked.length} blocked task(s): ${blocked.join(", ")}`,
+          color: "red",
+        });
       } else {
         lines.push({ text: "no blocked tasks", dim: true });
       }
@@ -307,7 +349,7 @@ function buildDetailLines(
   packet: TaskGraphPacket,
   layout: GraphLayout,
   lens: GraphLens,
-  selectedId: string | null
+  selectedId: string | null,
 ): ViewLine[] {
   if (!selectedId) return [];
   const selectedNode = packet.nodes.find((node) => node.taskId === selectedId);
@@ -320,7 +362,9 @@ function buildDetailLines(
       const upstream = upstreamNeighbors(packet, selectedId);
       const downstream = downstreamNeighbors(packet, selectedId);
       lines.push({ text: `  upstream: ${upstream.length > 0 ? upstream.join(", ") : "none"}` });
-      lines.push({ text: `  downstream: ${downstream.length > 0 ? downstream.join(", ") : "none"}` });
+      lines.push({
+        text: `  downstream: ${downstream.length > 0 ? downstream.join(", ") : "none"}`,
+      });
       const cycles = layout.cycles.filter((cycle) => cycle.includes(selectedId));
       if (cycles.length > 0) {
         lines.push({
@@ -331,11 +375,15 @@ function buildDetailLines(
       const incidentDangling = layout.edges
         .filter(
           (entry) =>
-            (entry.edge.source === selectedId && !entry.b) || (entry.edge.target === selectedId && !entry.a)
+            (entry.edge.source === selectedId && !entry.b) ||
+            (entry.edge.target === selectedId && !entry.a),
         )
         .map((entry) => (entry.edge.source === selectedId ? entry.edge.target : entry.edge.source));
       if (incidentDangling.length > 0) {
-        lines.push({ text: `  dangling references: ${incidentDangling.join(", ")}`, color: "yellow" });
+        lines.push({
+          text: `  dangling references: ${incidentDangling.join(", ")}`,
+          color: "yellow",
+        });
       }
       break;
     }
@@ -346,14 +394,16 @@ function buildDetailLines(
       });
       lines.push({
         text: `  unsafe parallel areas: ${
-          selectedNode.unsafeParallelAreas.length > 0 ? selectedNode.unsafeParallelAreas.join(", ") : "none"
+          selectedNode.unsafeParallelAreas.length > 0
+            ? selectedNode.unsafeParallelAreas.join(", ")
+            : "none"
         }`,
         color: selectedNode.unsafeParallelAreas.length > 0 ? "red" : undefined,
       });
       const overlaps = layout.edges.filter(
         (entry) =>
           entry.edge.type === "ownership_overlap" &&
-          (entry.edge.source === selectedId || entry.edge.target === selectedId)
+          (entry.edge.source === selectedId || entry.edge.target === selectedId),
       );
       if (overlaps.length === 0) {
         lines.push({ text: "  no ownership overlaps" });
@@ -381,7 +431,8 @@ function buildDetailLines(
     case "receipts": {
       const receipt = selectedNode.receipt;
       lines.push({ text: `  receipt: ${receipt.health}`, color: receiptColor(receipt.health) });
-      if (receipt.latestIdentifier) lines.push({ text: `  latest run log: ${receipt.latestIdentifier}` });
+      if (receipt.latestIdentifier)
+        lines.push({ text: `  latest run log: ${receipt.latestIdentifier}` });
       if (receipt.result) lines.push({ text: `  result: ${receipt.result}` });
       if (receipt.isLatestSuperseded) {
         lines.push({ text: "  latest run log is superseded", color: "yellow" });
@@ -389,13 +440,21 @@ function buildDetailLines(
       const verification = selectedNode.verification;
       lines.push({
         text: `  verification: ${verification.health}`,
-        color: receiptColor(verification.health as "missing" | "incomplete" | "passing" | "failing"),
+        color: receiptColor(
+          verification.health as "missing" | "incomplete" | "passing" | "failing",
+        ),
       });
       if (verification.missingCommands.length > 0) {
-        lines.push({ text: `  missing commands: ${verification.missingCommands.join(", ")}`, color: "yellow" });
+        lines.push({
+          text: `  missing commands: ${verification.missingCommands.join(", ")}`,
+          color: "yellow",
+        });
       }
       if (verification.failedCommands.length > 0) {
-        lines.push({ text: `  failed commands: ${verification.failedCommands.join(", ")}`, color: "red" });
+        lines.push({
+          text: `  failed commands: ${verification.failedCommands.join(", ")}`,
+          color: "red",
+        });
       }
       const counts = receiptHealthCounts(packet);
       lines.push({
@@ -404,7 +463,10 @@ function buildDetailLines(
       break;
     }
     case "status": {
-      lines.push({ text: `  status: ${selectedNode.status}`, color: statusColor(selectedNode.status) });
+      lines.push({
+        text: `  status: ${selectedNode.status}`,
+        color: statusColor(selectedNode.status),
+      });
       lines.push({ text: `  tier: ${selectedNode.tier}` });
       const summary = [...statusCounts(packet).entries()]
         .map(([status, count]) => `${status} ${count}`)
@@ -421,12 +483,14 @@ function buildGraphLines(
   packet: TaskGraphPacket,
   layout: GraphLayout,
   selectedId: string | null,
-  wide: boolean
+  wide: boolean,
 ): ViewLine[] {
   const lines: ViewLine[] = [];
   lines.push(...buildHeaderLines(state, packet));
   lines.push(
-    ...(wide ? buildWideGrid(layout, selectedId, state.focusTask) : buildNarrowList(layout, selectedId, state.focusTask))
+    ...(wide
+      ? buildWideGrid(layout, selectedId, state.focusTask)
+      : buildNarrowList(layout, selectedId, state.focusTask)),
   );
   if (wide) {
     lines.push({ text: "", dim: true });
@@ -526,11 +590,20 @@ export function GraphView(props: GraphViewProps): React.ReactElement {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphService, focusTask, depth, allActive, statusFilter, domainFilter, tierFilter, edgeTypeFilter]);
+  }, [
+    graphService,
+    focusTask,
+    depth,
+    allActive,
+    statusFilter,
+    domainFilter,
+    tierFilter,
+    edgeTypeFilter,
+  ]);
 
   const layout = useMemo(
     () => (packet ? computeLayout(packet, allActive ? undefined : focusTask) : null),
-    [packet, allActive, focusTask]
+    [packet, allActive, focusTask],
   );
 
   const visibleIds = layout ? layout.placed.map((entry) => entry.node.taskId) : [];
@@ -594,7 +667,13 @@ export function GraphView(props: GraphViewProps): React.ReactElement {
   };
 
   const cycleEdgeType = (): void => {
-    const list: Array<EdgeType | "all"> = ["all", "depends_on", "blocks", "conflicts_with", "ownership_overlap"];
+    const list: Array<EdgeType | "all"> = [
+      "all",
+      "depends_on",
+      "blocks",
+      "conflicts_with",
+      "ownership_overlap",
+    ];
     const index = list.indexOf(edgeTypeFilter);
     setEdgeTypeFilter(list[(index + 1) % list.length]);
   };
@@ -690,14 +769,21 @@ export function GraphView(props: GraphViewProps): React.ReactElement {
       packet,
       layout,
       effectiveSelected,
-      wide
+      wide,
     );
   }
 
   return (
     <Box flexDirection="column">
       {lines.map((line, index) => (
-        <Text key={index} color={line.color} dimColor={line.dim} inverse={line.inverse} bold={line.bold}>
+        <Text
+          // biome-ignore lint/suspicious/noArrayIndexKey: rendered graph rows have no stable id and identical text repeats (separators, blank rows); index is the stable key.
+          key={index}
+          color={line.color}
+          dimColor={line.dim}
+          inverse={line.inverse}
+          bold={line.bold}
+        >
           {line.text}
         </Text>
       ))}

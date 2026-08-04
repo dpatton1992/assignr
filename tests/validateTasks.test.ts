@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { validateTasks } from "../src/specs/validateTasks.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
 import type { LoadedTask } from "../src/specs/schema.js";
+import { validateTasks } from "../src/specs/validateTasks.js";
 
 function makeTask(overrides: Partial<LoadedTask["spec"]> = {}): LoadedTask {
   return {
@@ -56,9 +56,7 @@ describe("validateTasks", () => {
     ];
     const { invalid } = validateTasks(tasks);
     // The second file with a duplicate id should be flagged
-    const dupError = invalid.find((i) =>
-      i.errors.some((e) => e.message.includes("Duplicate"))
-    );
+    const dupError = invalid.find((i) => i.errors.some((e) => e.message.includes("Duplicate")));
     expect(dupError).toBeDefined();
   });
 
@@ -70,10 +68,7 @@ describe("validateTasks", () => {
   });
 
   it("passes when dependency exists", () => {
-    const tasks = [
-      makeTask({ id: "parent" }),
-      makeTask({ id: "child", depends_on: ["parent"] }),
-    ];
+    const tasks = [makeTask({ id: "parent" }), makeTask({ id: "child", depends_on: ["parent"] })];
     const { valid, invalid } = validateTasks(tasks);
     expect(invalid).toHaveLength(0);
     expect(valid).toHaveLength(2);
@@ -125,7 +120,7 @@ describe("validateTasks", () => {
           field: "conflicts_with",
           message: expect.stringContaining("missing-conflict-task"),
         }),
-      ])
+      ]),
     );
   });
 
@@ -191,7 +186,9 @@ describe("validateTasks", () => {
     writeFileSync(join(domainsDir, "core.yaml"), "id: core\n");
 
     try {
-      const { valid, invalid, counts } = validateTasks([makeTask()], { specsDomainsDir: domainsDir });
+      const { valid, invalid, counts } = validateTasks([makeTask()], {
+        specsDomainsDir: domainsDir,
+      });
 
       expect(invalid).toHaveLength(0);
       expect(valid).toHaveLength(1);

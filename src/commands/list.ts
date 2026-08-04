@@ -1,15 +1,9 @@
-import { existsSync } from "fs";
-import { basename, dirname, join } from "path";
+import { existsSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { STATUSES } from "../constants.js";
-import { loadTasks } from "../specs/loadTasks.js";
 import type { LoadedTaskWithTier, LoadTaskTier } from "../specs/loadTasks.js";
-import {
-  colorForStatus,
-  priorityBadge,
-  styleCell,
-  statusSymbol,
-  styleHelpSection,
-} from "../utils/styling.js";
+import { loadTasks } from "../specs/loadTasks.js";
+import { colorForStatus, statusSymbol, styleCell, styleHelpSection } from "../utils/styling.js";
 
 const MAX_TITLE_WIDTH = 50;
 
@@ -60,35 +54,34 @@ function formatRows(tasks: LoadedTaskWithTier[], showTier: boolean): string[] {
       `${styleCell("ID", undefined, idWidth)}  ${styleCell("TITLE", undefined, titleWidth)}  ${styleCell("STATUS", undefined, statusWidth)}  ${styleCell(
         "TIER",
         undefined,
-        tierWidth
+        tierWidth,
       )}  ${styleCell("DEPS", undefined, depsWidth)}`,
-      ...rows.map(
-        (row) => {
-          const plainStatus = `${statusSymbol(row.status)} ${row.status}`;
-          return `${pad(row.id, idWidth)}  ${pad(row.title, titleWidth)}  ${colorForStatus(row.status)(pad(plainStatus, statusDisplayWidth))}  ${pad(
-            row.tier,
-            tierWidth
-          )}  ${pad(row.deps, depsWidth)}`;
-        }
-      ),
+      ...rows.map((row) => {
+        const plainStatus = `${statusSymbol(row.status)} ${row.status}`;
+        return `${pad(row.id, idWidth)}  ${pad(row.title, titleWidth)}  ${colorForStatus(row.status)(pad(plainStatus, statusDisplayWidth))}  ${pad(
+          row.tier,
+          tierWidth,
+        )}  ${pad(row.deps, depsWidth)}`;
+      }),
     ];
   }
 
   return [
     `${styleCell("ID", undefined, idWidth)}  ${styleCell("TITLE", undefined, titleWidth)}  ${styleCell("STATUS", undefined, statusWidth)}  ${styleCell("DEPS", undefined, depsWidth)}`,
-    ...rows.map(
-      (row) => {
-        const plainStatus = `${statusSymbol(row.status)} ${row.status}`;
-        return `${pad(row.id, idWidth)}  ${pad(row.title, titleWidth)}  ${colorForStatus(row.status)(pad(plainStatus, statusDisplayWidth))}  ${pad(
-          row.deps,
-          depsWidth
-        )}`;
-      }
-    ),
+    ...rows.map((row) => {
+      const plainStatus = `${statusSymbol(row.status)} ${row.status}`;
+      return `${pad(row.id, idWidth)}  ${pad(row.title, titleWidth)}  ${colorForStatus(row.status)(pad(plainStatus, statusDisplayWidth))}  ${pad(
+        row.deps,
+        depsWidth,
+      )}`;
+    }),
   ];
 }
 
-function applyFilters(tasks: LoadedTaskWithTier[], options: ListCommandOptions): LoadedTaskWithTier[] {
+function applyFilters(
+  tasks: LoadedTaskWithTier[],
+  options: ListCommandOptions,
+): LoadedTaskWithTier[] {
   let filteredTasks = tasks;
 
   if (options.status) {
@@ -151,9 +144,7 @@ function requiredTaskDirs(specsTasksDir: string, tier: LoadTaskTier): string[] {
   const tasksRoot = resolveTasksRoot(specsTasksDir);
 
   if (tier === "all") {
-    return ["active", "completed", "archived"].map((taskTier) =>
-      join(tasksRoot, taskTier)
-    );
+    return ["active", "completed", "archived"].map((taskTier) => join(tasksRoot, taskTier));
   }
 
   return [join(tasksRoot, tier)];
@@ -194,7 +185,11 @@ function formatGroupHeader(groupBy: GroupByField, key: string, count: number): s
   return styleHelpSection(`── ${label}: ${key} (${count}) ──────────`);
 }
 
-export function listCommand(specsTasksDir: string, _cwd: string, options: ListCommandOptions = {}): void {
+export function listCommand(
+  specsTasksDir: string,
+  _cwd: string,
+  options: ListCommandOptions = {},
+): void {
   const tier = resolveTier(options);
   const taskDirs = requiredTaskDirs(specsTasksDir, tier);
   const hasReadableTaskDir = taskDirs.some((taskDir) => existsSync(taskDir));
@@ -210,7 +205,7 @@ export function listCommand(specsTasksDir: string, _cwd: string, options: ListCo
 
   if (errors.length > 0) {
     console.warn(
-      `  ⚠ ${errors.length} task file(s) could not be loaded (run "manciple validate" for details).`
+      `  ⚠ ${errors.length} task file(s) could not be loaded (run "manciple validate" for details).`,
     );
   }
 

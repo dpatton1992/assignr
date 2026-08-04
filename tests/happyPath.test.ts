@@ -2,12 +2,13 @@
  * Happy-path integration test for the core CLI workflow:
  *   init → new → list → validate → compile → set-status
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { spawnSync } from "child_process";
 
 const { homedirMock } = vi.hoisted(() => ({
   homedirMock: { value: "/nonexistent/manciple-test-home" },
@@ -20,18 +21,18 @@ vi.mock("os", async (importOriginal) => {
   return { ...actual, homedir: () => homedirMock.value };
 });
 
-import { initCommand } from "../src/commands/init.js";
-import { newCommand, newInteractiveCommand } from "../src/commands/new.js";
-import { listCommand } from "../src/commands/list.js";
-import { validateCommand } from "../src/commands/validate.js";
+import { archiveCommand } from "../src/commands/archive.js";
+import { checkLifecycleCommand } from "../src/commands/checkLifecycle.js";
 import { compileCommand } from "../src/commands/compile.js";
+import { completeCommand } from "../src/commands/complete.js";
+import { initCommand } from "../src/commands/init.js";
+import { listCommand } from "../src/commands/list.js";
+import { newCommand, newInteractiveCommand } from "../src/commands/new.js";
+import { reopenCommand } from "../src/commands/reopen.js";
 import { reviewCommand } from "../src/commands/review.js";
 import { setStatusCommand } from "../src/commands/setStatus.js";
-import { completeCommand } from "../src/commands/complete.js";
-import { archiveCommand } from "../src/commands/archive.js";
-import { reopenCommand } from "../src/commands/reopen.js";
-import { checkLifecycleCommand } from "../src/commands/checkLifecycle.js";
 import { statusCommand } from "../src/commands/status.js";
+import { validateCommand } from "../src/commands/validate.js";
 import { loadTasks } from "../src/specs/loadTasks.js";
 import { getPaths } from "../src/utils/paths.js";
 import { formatYamlDocument } from "../src/utils/yamlFormat.js";
@@ -171,7 +172,7 @@ describe("manciple init", () => {
       const globalConfig = join(fakeHome, ".config", "opencode", "opencode.json");
       expect(existsSync(globalConfig)).toBe(true);
       const config = JSON.parse(readFileSync(globalConfig, "utf-8")) as Record<string, unknown>;
-      expect((config.mcp as Record<string, unknown>)["manciple"]).toBeDefined();
+      expect((config.mcp as Record<string, unknown>).manciple).toBeDefined();
     } finally {
       homedirMock.value = "/nonexistent/manciple-test-home";
       rmSync(fakeHome, { recursive: true, force: true });
@@ -218,7 +219,7 @@ describe("command hints", () => {
     const emptyDir = mkdtempSync(join(tmpdir(), "manciple-empty-"));
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((() => {}) as never));
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
     let output = "";
     try {
       validateCommand(getPaths(emptyDir, ".manciple").specsTasks, emptyDir);
@@ -261,12 +262,12 @@ describe("manciple new", () => {
 
     const taskFile = join(p.tasksActive, "license-expiration-reminders.yaml");
     const spec = parse(readFileSync(taskFile, "utf-8")) as Record<string, unknown>;
-    expect(spec["id"]).toBe("license-expiration-reminders");
-    expect(spec["title"]).toBe("License expiration reminders");
-    expect(spec["status"]).toBe("pending");
-    expect(spec["type"]).toBe("implementation");
-    expect(spec["domain"]).toBe("credentialing");
-    expect(spec["priority"]).toBe("high");
+    expect(spec.id).toBe("license-expiration-reminders");
+    expect(spec.title).toBe("License expiration reminders");
+    expect(spec.status).toBe("pending");
+    expect(spec.type).toBe("implementation");
+    expect(spec.domain).toBe("credentialing");
+    expect(spec.priority).toBe("high");
   });
 
   it("does NOT write to specs/tasks/", () => {
@@ -336,55 +337,61 @@ describe("manciple new", () => {
     expect(prompts.join("\n")).toContain("Output required");
     expect(prompts.join("\n")).toContain("Note");
     expect(raw).not.toContain("TODO:");
-    expect(spec["title"]).toBe("Guided onboarding task");
-    expect(spec["goal"]).toBe("Create a guided first-run task creation flow.");
-    expect(spec["type"]).toBe("implementation");
-    expect(spec["domain"]).toBe("core");
-    expect(spec["priority"]).toBe("high");
-    expect(spec["acceptance_criteria"]).toEqual(["User can create a complete task from prompts."]);
-    expect(spec["verification"]).toEqual({ commands: ["pnpm test -- new"] });
-    expect(spec["allowed_paths"]).toEqual(["src/commands/new.ts", "tests/"]);
-    expect(spec["forbidden_paths"]).toEqual(["dist/"]);
-    expect(spec["outputs_required"]).toEqual(["files_changed", "risks"]);
-    expect(spec["notes"]).toEqual(["Keep prompts easy to test."]);
+    expect(spec.title).toBe("Guided onboarding task");
+    expect(spec.goal).toBe("Create a guided first-run task creation flow.");
+    expect(spec.type).toBe("implementation");
+    expect(spec.domain).toBe("core");
+    expect(spec.priority).toBe("high");
+    expect(spec.acceptance_criteria).toEqual(["User can create a complete task from prompts."]);
+    expect(spec.verification).toEqual({ commands: ["pnpm test -- new"] });
+    expect(spec.allowed_paths).toEqual(["src/commands/new.ts", "tests/"]);
+    expect(spec.forbidden_paths).toEqual(["dist/"]);
+    expect(spec.outputs_required).toEqual(["files_changed", "risks"]);
+    expect(spec.notes).toEqual(["Keep prompts easy to test."]);
   });
 
   it("does not write a partial task when interactive prompting fails", async () => {
-    await expect(newInteractiveCommand(undefined, {
-      type: "implementation",
-      domain: "core",
-      priority: "medium",
-      cwd,
-      activeDir: p.tasksActive,
-      question: async () => {
-        throw new Error("cancelled");
-      },
-    })).rejects.toThrow("Error: interactive task creation failed: cancelled");
+    await expect(
+      newInteractiveCommand(undefined, {
+        type: "implementation",
+        domain: "core",
+        priority: "medium",
+        cwd,
+        activeDir: p.tasksActive,
+        question: async () => {
+          throw new Error("cancelled");
+        },
+      }),
+    ).rejects.toThrow("Error: interactive task creation failed: cancelled");
 
     expect(existsSync(join(p.tasksActive, "guided-onboarding-task.yaml"))).toBe(false);
   });
 
   it("throws without writing a task when --goal is empty", () => {
-    expect(() => newCommand("Empty goal task", {
-      type: "implementation",
-      domain: "core",
-      priority: "medium",
-      goal: "   ",
-      cwd,
-      activeDir: p.tasksActive,
-    })).toThrow("Error: --goal value must not be empty.");
+    expect(() =>
+      newCommand("Empty goal task", {
+        type: "implementation",
+        domain: "core",
+        priority: "medium",
+        goal: "   ",
+        cwd,
+        activeDir: p.tasksActive,
+      }),
+    ).toThrow("Error: --goal value must not be empty.");
 
     expect(existsSync(join(p.tasksActive, "empty-goal-task.yaml"))).toBe(false);
   });
 
   it("throws without writing a task when the title cannot generate an id", () => {
-    expect(() => newCommand("!!!", {
-      type: "implementation",
-      domain: "core",
-      priority: "medium",
-      cwd,
-      activeDir: p.tasksActive,
-    })).toThrow("Error: could not generate a valid id from the provided title.");
+    expect(() =>
+      newCommand("!!!", {
+        type: "implementation",
+        domain: "core",
+        priority: "medium",
+        cwd,
+        activeDir: p.tasksActive,
+      }),
+    ).toThrow("Error: could not generate a valid id from the provided title.");
   });
 
   it("throws without overwriting a duplicate task spec", () => {
@@ -397,14 +404,16 @@ describe("manciple new", () => {
       activeDir: p.tasksActive,
     });
 
-    expect(() => newCommand("Duplicate task", {
-      type: "implementation",
-      domain: "core",
-      priority: "medium",
-      goal: "Create the second copy.",
-      cwd,
-      activeDir: p.tasksActive,
-    })).toThrow("Error: task spec already exists at .manciple/tasks/active/duplicate-task.yaml");
+    expect(() =>
+      newCommand("Duplicate task", {
+        type: "implementation",
+        domain: "core",
+        priority: "medium",
+        goal: "Create the second copy.",
+        cwd,
+        activeDir: p.tasksActive,
+      }),
+    ).toThrow("Error: task spec already exists at .manciple/tasks/active/duplicate-task.yaml");
 
     expect(readFileSync(created, "utf-8")).toContain("Create the first copy.");
   });
@@ -449,7 +458,9 @@ describe("manciple validate", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -485,7 +496,9 @@ describe("manciple validate", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -593,7 +606,9 @@ describe("manciple compile", () => {
   it("compiles a clean-init core task without missing-domain warnings", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -612,7 +627,7 @@ describe("manciple compile", () => {
           generatedDir: p.promptsGenerated,
           cwd,
           taskId: "test-task",
-        })
+        }),
       ).not.toThrow();
 
       const promptFile = join(p.promptsGenerated, "test-task.md");
@@ -632,7 +647,7 @@ describe("manciple compile", () => {
     writeFileSync(
       join(p.specsDomains, "credentialing.yaml"),
       "id: credentialing\ndescription: Provider credentialing workflows.\n",
-      "utf-8"
+      "utf-8",
     );
 
     newCommand("License expiration reminders", {
@@ -655,7 +670,7 @@ describe("manciple compile", () => {
       const promptFile = join(p.promptsGenerated, "license-expiration-reminders.md");
       expect(existsSync(promptFile)).toBe(true);
       expect(logSpy).toHaveBeenCalledWith(
-        "  ✓ Compiled: .manciple/prompts/generated/license-expiration-reminders.md"
+        "  ✓ Compiled: .manciple/prompts/generated/license-expiration-reminders.md",
       );
 
       const content = readFileSync(promptFile, "utf-8");
@@ -701,7 +716,7 @@ describe("manciple compile", () => {
           "notes: []",
           "",
         ].join("\n"),
-        "utf-8"
+        "utf-8",
       );
       writeFileSync(
         join(p.tasksActive, "target-task.yaml"),
@@ -728,7 +743,7 @@ describe("manciple compile", () => {
           "notes: []",
           "",
         ].join("\n"),
-        "utf-8"
+        "utf-8",
       );
 
       compileCommand({
@@ -766,17 +781,9 @@ describe("manciple review", () => {
         activeDir: p.tasksActive,
       });
 
-      reviewCommand(
-        "license-expiration-reminders",
-        p.specsTasks,
-        p.promptsGenerated,
-        cwd
-      );
+      reviewCommand("license-expiration-reminders", p.specsTasks, p.promptsGenerated, cwd);
 
-      const reviewPromptFile = join(
-        p.promptsGenerated,
-        "review-license-expiration-reminders.md"
-      );
+      const reviewPromptFile = join(p.promptsGenerated, "review-license-expiration-reminders.md");
       const implementationPromptPath =
         ".manciple/prompts/generated/license-expiration-reminders.md";
 
@@ -784,7 +791,7 @@ describe("manciple review", () => {
       const logOutput = logSpy.mock.calls.flat().join("\n");
       expect(logOutput).toContain("Review prompt created");
       expect(logOutput).toContain(
-        `Review prompts are separate from compiled implementation prompts, which use ${implementationPromptPath}.`
+        `Review prompts are separate from compiled implementation prompts, which use ${implementationPromptPath}.`,
       );
 
       const content = readFileSync(reviewPromptFile, "utf-8");
@@ -819,7 +826,9 @@ describe("manciple review", () => {
       });
 
       const runLogPath = join(p.runs, "2026-05-23-12-00-00-license-expiration-reminders.md");
-      writeFileSync(runLogPath, `# Run Log: License expiration reminders
+      writeFileSync(
+        runLogPath,
+        `# Run Log: License expiration reminders
 
 ## Files Changed
 
@@ -844,7 +853,9 @@ complete
 _Source: provided by user_
 
 none
-`, "utf-8");
+`,
+        "utf-8",
+      );
 
       const featureDir = join(cwd, "src", "features", "licenses");
       mkdirSync(featureDir, { recursive: true });
@@ -857,17 +868,9 @@ none
       spawnSync("git", ["commit", "-m", "baseline"], { cwd, encoding: "utf-8" });
       writeFileSync(featureFile, "export const reminders = true;\n", "utf-8");
 
-      reviewCommand(
-        "license-expiration-reminders",
-        p.specsTasks,
-        p.promptsGenerated,
-        cwd
-      );
+      reviewCommand("license-expiration-reminders", p.specsTasks, p.promptsGenerated, cwd);
 
-      const reviewPromptFile = join(
-        p.promptsGenerated,
-        "review-license-expiration-reminders.md"
-      );
+      const reviewPromptFile = join(p.promptsGenerated, "review-license-expiration-reminders.md");
       const content = readFileSync(reviewPromptFile, "utf-8");
 
       // Default compact: no full run log content or full diff
@@ -901,7 +904,9 @@ none
       });
 
       const runLogPath = join(p.runs, "2026-05-23-12-00-00-license-expiration-reminders.md");
-      writeFileSync(runLogPath, `# Run Log: License expiration reminders
+      writeFileSync(
+        runLogPath,
+        `# Run Log: License expiration reminders
 
 ## Files Changed
 
@@ -926,7 +931,9 @@ complete
 _Source: provided by user_
 
 none
-`, "utf-8");
+`,
+        "utf-8",
+      );
 
       const featureDir = join(cwd, "src", "features", "licenses");
       mkdirSync(featureDir, { recursive: true });
@@ -939,18 +946,12 @@ none
       spawnSync("git", ["commit", "-m", "baseline"], { cwd, encoding: "utf-8" });
       writeFileSync(featureFile, "export const reminders = true;\n", "utf-8");
 
-      reviewCommand(
-        "license-expiration-reminders",
-        p.specsTasks,
-        p.promptsGenerated,
-        cwd,
-        { includeRunLog: true, includeGitDiff: true }
-      );
+      reviewCommand("license-expiration-reminders", p.specsTasks, p.promptsGenerated, cwd, {
+        includeRunLog: true,
+        includeGitDiff: true,
+      });
 
-      const reviewPromptFile = join(
-        p.promptsGenerated,
-        "review-license-expiration-reminders.md"
-      );
+      const reviewPromptFile = join(p.promptsGenerated, "review-license-expiration-reminders.md");
       const content = readFileSync(reviewPromptFile, "utf-8");
 
       expect(content).toContain("## Task Goal");
@@ -982,7 +983,7 @@ describe("manciple set-status", () => {
 
     const taskFile = join(p.tasksActive, "license-expiration-reminders.yaml");
     const spec = parse(readFileSync(taskFile, "utf-8")) as Record<string, unknown>;
-    expect(spec["status"]).toBe("in_progress");
+    expect(spec.status).toBe("in_progress");
   });
 
   it("normalizes task YAML deterministically when updating status", () => {
@@ -1011,7 +1012,7 @@ describe("manciple set-status", () => {
     const raw = readFileSync(taskFile, "utf-8");
     expect(raw).not.toBe(unformatted);
     expect(raw).toBe(formatYamlDocument(parse(raw)));
-    expect((parse(raw) as Record<string, unknown>)["status"]).toBe("in_progress");
+    expect((parse(raw) as Record<string, unknown>).status).toBe("in_progress");
   });
 
   it("set-status finds tasks across all tiers via loadTasks", () => {
@@ -1026,12 +1027,12 @@ describe("manciple set-status", () => {
 
     // Should find the task even though we only pass specsTasks dir
     expect(() =>
-      setStatusCommand("license-expiration-reminders", "needs_review", p.specsTasks, cwd)
+      setStatusCommand("license-expiration-reminders", "needs_review", p.specsTasks, cwd),
     ).not.toThrow();
 
     const taskFile = join(p.tasksActive, "license-expiration-reminders.yaml");
     const spec = parse(readFileSync(taskFile, "utf-8")) as Record<string, unknown>;
-    expect(spec["status"]).toBe("needs_review");
+    expect(spec.status).toBe("needs_review");
   });
 
   it("moves a task to tasks/completed/ when setting status complete", () => {
@@ -1053,7 +1054,7 @@ describe("manciple set-status", () => {
     expect(existsSync(completedFile)).toBe(true);
 
     const spec = parse(readFileSync(completedFile, "utf-8")) as Record<string, unknown>;
-    expect(spec["status"]).toBe("complete");
+    expect(spec.status).toBe("complete");
   });
 
   it("does not overwrite an existing completed task when setting status complete", () => {
@@ -1071,22 +1072,24 @@ describe("manciple set-status", () => {
     writeFileSync(completedFile, "already completed\n", "utf-8");
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     try {
       expect(() =>
-        setStatusCommand("license-expiration-reminders", "complete", p.specsTasks, cwd)
+        setStatusCommand("license-expiration-reminders", "complete", p.specsTasks, cwd),
       ).toThrow("process.exit(1)");
 
       expect(readFileSync(completedFile, "utf-8")).toBe("already completed\n");
       const activeFile = join(p.tasksActive, "license-expiration-reminders.yaml");
       expect(existsSync(activeFile)).toBe(true);
       const activeSpec = parse(readFileSync(activeFile, "utf-8")) as Record<string, unknown>;
-      expect(activeSpec["status"]).toBe("pending");
+      expect(activeSpec.status).toBe("pending");
       expect(errorSpy.mock.calls.flat().join("\n")).toBe(
-        "Task license-expiration-reminders already exists in completed tasks."
+        "Task license-expiration-reminders already exists in completed tasks.",
       );
     } finally {
       errorSpy.mockRestore();
@@ -1161,12 +1164,14 @@ describe("manciple complete", () => {
     expect(existsSync(completedFile)).toBe(true);
 
     const spec = parse(readFileSync(completedFile, "utf-8")) as Record<string, unknown>;
-    expect(spec["status"]).toBe("complete");
+    expect(spec.status).toBe("complete");
   });
 
   it("exits non-zero when the task is missing from active tasks", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -1176,10 +1181,12 @@ describe("manciple complete", () => {
           specsTasksDir: p.specsTasks,
           completedDir: p.tasksCompleted,
           cwd,
-        })
+        }),
       ).toThrow("process.exit(1)");
 
-      expect(errorSpy.mock.calls.flat().join("\n")).toBe("Task missing-task not found in active tasks.");
+      expect(errorSpy.mock.calls.flat().join("\n")).toBe(
+        "Task missing-task not found in active tasks.",
+      );
     } finally {
       errorSpy.mockRestore();
       exitSpy.mockRestore();
@@ -1201,7 +1208,9 @@ describe("manciple complete", () => {
     writeFileSync(completedFile, "already completed\n", "utf-8");
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -1211,13 +1220,13 @@ describe("manciple complete", () => {
           specsTasksDir: p.specsTasks,
           completedDir: p.tasksCompleted,
           cwd,
-        })
+        }),
       ).toThrow("process.exit(1)");
 
       expect(readFileSync(completedFile, "utf-8")).toBe("already completed\n");
       expect(existsSync(join(p.tasksActive, "license-expiration-reminders.yaml"))).toBe(true);
       expect(errorSpy.mock.calls.flat().join("\n")).toBe(
-        "Task license-expiration-reminders already exists in completed. Use manciple reopen first."
+        "Task license-expiration-reminders already exists in completed. Use manciple reopen first.",
       );
     } finally {
       errorSpy.mockRestore();
@@ -1254,7 +1263,7 @@ describe("manciple reopen", () => {
     expect(existsSync(completedFile)).toBe(false);
 
     const spec = parse(readFileSync(activeFile, "utf-8")) as Record<string, unknown>;
-    expect(spec["status"]).toBe("in_progress");
+    expect(spec.status).toBe("in_progress");
   });
 
   it("reopens an archived task into tasks/active/ with in_progress status", () => {
@@ -1284,7 +1293,7 @@ describe("manciple reopen", () => {
     expect(existsSync(archivedFile)).toBe(false);
 
     const spec = parse(readFileSync(activeFile, "utf-8")) as Record<string, unknown>;
-    expect(spec["status"]).toBe("in_progress");
+    expect(spec.status).toBe("in_progress");
   });
 
   it("searches completed tasks before archived tasks for duplicate task ids", () => {
@@ -1316,7 +1325,7 @@ describe("manciple reopen", () => {
         "goal: Leave this archived copy untouched.",
         "",
       ].join("\n"),
-      "utf-8"
+      "utf-8",
     );
 
     reopenCommand("duplicate-lifecycle-task", {
@@ -1332,9 +1341,9 @@ describe("manciple reopen", () => {
 
     expect(existsSync(completedFile)).toBe(false);
     expect(existsSync(archivedFile)).toBe(true);
-    expect(activeSpec["title"]).toBe("Duplicate lifecycle task");
-    expect(activeSpec["status"]).toBe("in_progress");
-    expect(archivedSpec["status"]).toBe("archived");
+    expect(activeSpec.title).toBe("Duplicate lifecycle task");
+    expect(activeSpec.status).toBe("in_progress");
+    expect(archivedSpec.status).toBe("archived");
   });
 
   it("exits non-zero without overwriting an existing active task", () => {
@@ -1357,7 +1366,9 @@ describe("manciple reopen", () => {
     writeFileSync(activeFile, "existing active task\n", "utf-8");
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -1367,14 +1378,14 @@ describe("manciple reopen", () => {
           specsTasksDir: p.specsTasks,
           activeDir: p.tasksActive,
           cwd,
-        })
+        }),
       ).toThrow("process.exit(1)");
 
       const completedSpec = parse(readFileSync(completedFile, "utf-8")) as Record<string, unknown>;
       expect(readFileSync(activeFile, "utf-8")).toBe("existing active task\n");
-      expect(completedSpec["status"]).toBe("complete");
+      expect(completedSpec.status).toBe("complete");
       expect(errorSpy.mock.calls.flat().join("\n")).toBe(
-        "Task license-expiration-reminders already exists in active tasks."
+        "Task license-expiration-reminders already exists in active tasks.",
       );
     } finally {
       errorSpy.mockRestore();
@@ -1384,7 +1395,9 @@ describe("manciple reopen", () => {
 
   it("exits non-zero when the task is missing from completed and archived tasks", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -1394,11 +1407,11 @@ describe("manciple reopen", () => {
           specsTasksDir: p.specsTasks,
           activeDir: p.tasksActive,
           cwd,
-        })
+        }),
       ).toThrow("process.exit(1)");
 
       expect(errorSpy.mock.calls.flat().join("\n")).toBe(
-        "Task missing-task not found in completed or archived tasks."
+        "Task missing-task not found in completed or archived tasks.",
       );
       expect(existsSync(join(p.tasksActive, "missing-task.yaml"))).toBe(false);
     } finally {
@@ -1421,17 +1434,21 @@ describe("manciple check-lifecycle", () => {
 
     const taskFile = join(p.tasksActive, "misplaced-complete-task.yaml");
     const spec = parse(readFileSync(taskFile, "utf-8")) as Record<string, unknown>;
-    spec["status"] = "complete";
+    spec.status = "complete";
     writeFileSync(
       taskFile,
-      Object.entries(spec)
-        .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`)
-        .join("\n") + "\n",
-      "utf-8"
+      `${Object.entries(spec)
+        .map(
+          ([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
+        )
+        .join("\n")}\n`,
+      "utf-8",
     );
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -1442,7 +1459,7 @@ describe("manciple check-lifecycle", () => {
           activeDir: p.tasksActive,
           completedDir: p.tasksCompleted,
           archivedDir: p.tasksArchived,
-        })
+        }),
       ).toThrow("process.exit(1)");
 
       const output = errorSpy.mock.calls.flat().join("\n");
@@ -1487,7 +1504,7 @@ describe("manciple check-lifecycle", () => {
           activeDir: p.tasksActive,
           completedDir: p.tasksCompleted,
           archivedDir: p.tasksArchived,
-        })
+        }),
       ).not.toThrow();
 
       expect(logSpy.mock.calls.flat().join("\n")).toContain("Lifecycle placement OK");

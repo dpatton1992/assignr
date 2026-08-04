@@ -1,5 +1,5 @@
-import { existsSync } from "fs";
-import { join } from "path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { LoadedTask } from "./schema.js";
 
 export interface ValidationIssue {
@@ -38,7 +38,7 @@ const OPTIONAL_FIELDS = [
 
 export function validateTasks(
   tasks: LoadedTask[],
-  options: ValidateTasksOptions = {}
+  options: ValidateTasksOptions = {},
 ): ValidationResult {
   const warnings: ValidationIssue[] = [];
   const errorsByFile = new Map<string, ValidationIssue[]>();
@@ -94,8 +94,7 @@ export function validateTasks(
         allIds,
         countTask,
         counts,
-        missingMessage: (reference) =>
-          `Task "${spec.id}" depends on missing task "${reference}"`,
+        missingMessage: (reference) => `Task "${spec.id}" depends on missing task "${reference}"`,
         addError,
       }) || hasMissingDependencyError;
 
@@ -107,8 +106,7 @@ export function validateTasks(
       allIds,
       countTask,
       counts,
-      missingMessage: (reference) =>
-        `Task "${spec.id}" blocks missing task "${reference}"`,
+      missingMessage: (reference) => `Task "${spec.id}" blocks missing task "${reference}"`,
       addError,
     });
 
@@ -120,8 +118,7 @@ export function validateTasks(
       allIds,
       countTask,
       counts,
-      missingMessage: (reference) =>
-        `Task "${spec.id}" conflicts with missing task "${reference}"`,
+      missingMessage: (reference) => `Task "${spec.id}" conflicts with missing task "${reference}"`,
       selfMessage: () => `Task "${spec.id}" cannot conflict with itself`,
       addError,
     });
@@ -171,11 +168,7 @@ export function validateTasks(
   }
 
   if (options.specsDomainsDir) {
-    const domainValidation = validateDomainReferences(
-      tasks,
-      options.specsDomainsDir,
-      shouldCount
-    );
+    const domainValidation = validateDomainReferences(tasks, options.specsDomainsDir, shouldCount);
     counts.domainsChecked = domainValidation.domainsChecked;
     counts.contractsChecked += domainValidation.contractsChecked;
     for (const { filePath, issue } of domainValidation.issues) {
@@ -210,7 +203,7 @@ export function validateTasks(
 function validateDomainReferences(
   tasks: LoadedTask[],
   specsDomainsDir: string,
-  shouldCount: (filePath: string) => boolean
+  shouldCount: (filePath: string) => boolean,
 ): {
   issues: Array<{ filePath: string; issue: ValidationIssue }>;
   domainsChecked: number;
@@ -297,10 +290,7 @@ function validateTaskReferences({
   return hasMissingReference;
 }
 
-function findDependencyCycles(
-  tasks: LoadedTask[],
-  taskById: Map<string, LoadedTask>
-): string[][] {
+function findDependencyCycles(tasks: LoadedTask[], taskById: Map<string, LoadedTask>): string[][] {
   const visited = new Set<string>();
   const inStack = new Set<string>();
   const stack: string[] = [];
@@ -341,9 +331,6 @@ function findDependencyCycles(
 
 function canonicalCycleKey(cycle: string[]): string {
   const nodes = cycle.slice(0, -1);
-  const rotations = nodes.map((_, index) => [
-    ...nodes.slice(index),
-    ...nodes.slice(0, index),
-  ]);
+  const rotations = nodes.map((_, index) => [...nodes.slice(index), ...nodes.slice(0, index)]);
   return rotations.map((rotation) => rotation.join("\0")).sort()[0] ?? "";
 }

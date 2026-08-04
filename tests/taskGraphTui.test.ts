@@ -1,29 +1,39 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import React from "react";
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { stringify } from "yaml";
-import { render as inkTestRender, cleanup as inkTestingCleanup } from "ink-testing-library";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { render as inkRender } from "ink";
-
+import { cleanup as inkTestingCleanup, render as inkTestRender } from "ink-testing-library";
+import React from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { stringify } from "yaml";
+import { initCommand } from "../src/commands/init.js";
+import { newCommand } from "../src/commands/new.js";
+import type {
+  EdgeType,
+  GraphEdge,
+  GraphTaskNode,
+  TaskGraphOptions,
+  TaskGraphPacket,
+} from "../src/graph/taskGraphPacket.js";
+import { TaskGraphError } from "../src/graph/taskGraphPacket.js";
 import type {
   ReviewDecisionId,
   ReviewPacket,
   ReviewQueueRow,
   ReviewQueueSummary,
 } from "../src/review/reviewPacket.js";
-import type { ReviewService } from "../src/tui/service.js";
+import type { ReviewTuiSession } from "../src/tui/app.js";
+import { ReviewTui } from "../src/tui/app.js";
+import {
+  computeLayout,
+  downstreamNeighbors,
+  findCycles,
+  upstreamNeighbors,
+} from "../src/tui/graphLayout.js";
 import type { GraphService } from "../src/tui/graphService.js";
 import { createGraphService } from "../src/tui/graphService.js";
-import { ReviewTui } from "../src/tui/app.js";
-import type { ReviewTuiSession } from "../src/tui/app.js";
-import { computeLayout, findCycles, upstreamNeighbors, downstreamNeighbors } from "../src/tui/graphLayout.js";
-import type { GraphTaskNode, GraphEdge, EdgeType, TaskGraphOptions, TaskGraphPacket } from "../src/graph/taskGraphPacket.js";
-import { TaskGraphError } from "../src/graph/taskGraphPacket.js";
-import { initCommand } from "../src/commands/init.js";
-import { newCommand } from "../src/commands/new.js";
+import type { ReviewService } from "../src/tui/service.js";
 import { getPaths } from "../src/utils/paths.js";
 
 // ── Fixture helpers ───────────────────────────────────────────────────────
@@ -44,14 +54,24 @@ function node(id: string, overrides: Partial<GraphTaskNode> = {}): GraphTaskNode
     lockedPaths: [],
     unsafeParallelAreas: [],
     receipt: { present: false, health: "missing", isLatestSuperseded: false },
-    verification: { health: "missing", hasVerification: false, missingCommands: [], failedCommands: [] },
+    verification: {
+      health: "missing",
+      hasVerification: false,
+      missingCommands: [],
+      failedCommands: [],
+    },
     risks: [],
     hasDetailedReviewPacket: true,
     ...overrides,
   };
 }
 
-function edge(type: EdgeType, source: string, target: string, overrides: Partial<GraphEdge> = {}): GraphEdge {
+function edge(
+  type: EdgeType,
+  source: string,
+  target: string,
+  overrides: Partial<GraphEdge> = {},
+): GraphEdge {
   return {
     type,
     source,
@@ -61,8 +81,17 @@ function edge(type: EdgeType, source: string, target: string, overrides: Partial
   };
 }
 
-function packet(nodes: GraphTaskNode[], edges: GraphEdge[], overrides: Partial<TaskGraphPacket> = {}): TaskGraphPacket {
-  const byEdgeType: Record<EdgeType, number> = { depends_on: 0, blocks: 0, conflicts_with: 0, ownership_overlap: 0 };
+function packet(
+  nodes: GraphTaskNode[],
+  edges: GraphEdge[],
+  overrides: Partial<TaskGraphPacket> = {},
+): TaskGraphPacket {
+  const byEdgeType: Record<EdgeType, number> = {
+    depends_on: 0,
+    blocks: 0,
+    conflicts_with: 0,
+    ownership_overlap: 0,
+  };
   for (const entry of edges) byEdgeType[entry.type] += 1;
   return {
     nodes,
@@ -85,40 +114,104 @@ function richNodes(): GraphTaskNode[] {
       status: "needs_review",
       lockedPaths: ["src/shared/secret/**"],
       unsafeParallelAreas: ["src/unsafe/**"],
-      receipt: { present: true, health: "passing", isLatestSuperseded: false, latestIdentifier: "alpha.md", result: "complete" },
-      verification: { health: "passing", hasVerification: true, missingCommands: [], failedCommands: [] },
+      receipt: {
+        present: true,
+        health: "passing",
+        isLatestSuperseded: false,
+        latestIdentifier: "alpha.md",
+        result: "complete",
+      },
+      verification: {
+        health: "passing",
+        hasVerification: true,
+        missingCommands: [],
+        failedCommands: [],
+      },
     }),
     node("beta", {
       status: "complete",
-      receipt: { present: true, health: "passing", isLatestSuperseded: false, latestIdentifier: "beta.md", result: "complete" },
-      verification: { health: "passing", hasVerification: true, missingCommands: [], failedCommands: [] },
+      receipt: {
+        present: true,
+        health: "passing",
+        isLatestSuperseded: false,
+        latestIdentifier: "beta.md",
+        result: "complete",
+      },
+      verification: {
+        health: "passing",
+        hasVerification: true,
+        missingCommands: [],
+        failedCommands: [],
+      },
     }),
     node("gamma", {
       status: "blocked",
-      receipt: { present: true, health: "failing", isLatestSuperseded: false, latestIdentifier: "gamma.md", result: "failed" },
-      verification: { health: "failing", hasVerification: true, missingCommands: [], failedCommands: ["pnpm test"] },
+      receipt: {
+        present: true,
+        health: "failing",
+        isLatestSuperseded: false,
+        latestIdentifier: "gamma.md",
+        result: "failed",
+      },
+      verification: {
+        health: "failing",
+        hasVerification: true,
+        missingCommands: [],
+        failedCommands: ["pnpm test"],
+      },
       risks: ["Flaky test observed."],
     }),
     node("delta", {
       status: "pending",
       receipt: { present: false, health: "missing", isLatestSuperseded: false },
-      verification: { health: "missing", hasVerification: false, missingCommands: ["pnpm test"], failedCommands: [] },
+      verification: {
+        health: "missing",
+        hasVerification: false,
+        missingCommands: ["pnpm test"],
+        failedCommands: [],
+      },
     }),
     node("epsilon", {
       status: "needs_review",
-      receipt: { present: true, health: "incomplete", isLatestSuperseded: false, latestIdentifier: "epsilon.md" },
-      verification: { health: "incomplete", hasVerification: false, missingCommands: ["pnpm build"], failedCommands: [] },
+      receipt: {
+        present: true,
+        health: "incomplete",
+        isLatestSuperseded: false,
+        latestIdentifier: "epsilon.md",
+      },
+      verification: {
+        health: "incomplete",
+        hasVerification: false,
+        missingCommands: ["pnpm build"],
+        failedCommands: [],
+      },
     }),
     node("zeta", {
       status: "complete",
       tier: "completed",
-      receipt: { present: true, health: "passing", isLatestSuperseded: false, latestIdentifier: "zeta.md", result: "complete" },
-      verification: { health: "passing", hasVerification: true, missingCommands: [], failedCommands: [] },
+      receipt: {
+        present: true,
+        health: "passing",
+        isLatestSuperseded: false,
+        latestIdentifier: "zeta.md",
+        result: "complete",
+      },
+      verification: {
+        health: "passing",
+        hasVerification: true,
+        missingCommands: [],
+        failedCommands: [],
+      },
     }),
     node("omega", {
       status: "needs_review",
       receipt: { present: false, health: "missing", isLatestSuperseded: false },
-      verification: { health: "missing", hasVerification: false, missingCommands: [], failedCommands: [] },
+      verification: {
+        health: "missing",
+        hasVerification: false,
+        missingCommands: [],
+        failedCommands: [],
+      },
     }),
   ];
 }
@@ -144,7 +237,8 @@ function richEdges(): GraphEdge[] {
           path: "src/unsafe/**",
           otherPath: "src/unsafe/**",
           kind: "unsafe_parallel_area",
-          reason: "alpha flags unsafe parallel area src/unsafe/**; overlaps allowed path src/unsafe/** of omega",
+          reason:
+            "alpha flags unsafe parallel area src/unsafe/**; overlaps allowed path src/unsafe/** of omega",
         },
       ],
     }),
@@ -166,9 +260,12 @@ function reviewPacket(taskId: string): ReviewPacket {
     domain: "core",
     priority: "high",
     goal: "Deliver the feature.",
+    worktree: { managed: false, workspacePath: ".", dirty: true },
     claimedScope: { allowedPaths: ["src/**"], forbiddenPaths: ["dist/**"] },
     changedFilesSource: "run-log",
-    changedPaths: [{ path: "src/example.ts", source: "run-log", inAllowedPaths: true, inForbiddenPaths: false }],
+    changedPaths: [
+      { path: "src/example.ts", source: "run-log", inAllowedPaths: true, inForbiddenPaths: false },
+    ],
     scopeDrift: {
       source: "run-log",
       changedPaths: ["src/example.ts"],
@@ -227,7 +324,14 @@ function reviewPacket(taskId: string): ReviewPacket {
 }
 
 function queueRow(taskId: string): ReviewQueueRow {
-  return { taskId, title: `Task ${taskId}`, status: "needs_review", tier: "active", domain: "core", priority: "medium" };
+  return {
+    taskId,
+    title: `Task ${taskId}`,
+    status: "needs_review",
+    tier: "active",
+    domain: "core",
+    priority: "medium",
+  };
 }
 
 function makeQueue(ids: string[]): ReviewQueueSummary {
@@ -260,9 +364,18 @@ class FakeReviewService implements ReviewService {
     return found;
   }
 
-  applyDecision(action: ReviewDecisionId, taskId: string): ReturnType<ReviewService["applyDecision"]> {
+  applyDecision(
+    action: ReviewDecisionId,
+    taskId: string,
+  ): ReturnType<ReviewService["applyDecision"]> {
     this.applyDecisionCalls.push({ action, taskId });
-    return { taskId, outcome: "approved", previousStatus: "needs_review", nextStatus: "complete", taskPath: `${taskId}.yaml` };
+    return {
+      taskId,
+      outcome: "approved",
+      previousStatus: "needs_review",
+      nextStatus: "complete",
+      taskPath: `${taskId}.yaml`,
+    };
   }
 }
 
@@ -274,7 +387,7 @@ class FakeGraphService implements GraphService {
   constructor(
     private allNodes: GraphTaskNode[],
     private allEdges: GraphEdge[],
-    private throwFor: (options: TaskGraphOptions) => boolean = () => false
+    private throwFor: (options: TaskGraphOptions) => boolean = () => false,
   ) {}
 
   getGraph(options: TaskGraphOptions): TaskGraphPacket {
@@ -286,7 +399,8 @@ class FakeGraphService implements GraphService {
     let nodes = this.allNodes;
     if (options.status) nodes = nodes.filter((candidate) => candidate.status === options.status);
     if (options.domain) nodes = nodes.filter((candidate) => candidate.domain === options.domain);
-    if (options.tier && options.tier !== "all") nodes = nodes.filter((candidate) => candidate.tier === options.tier);
+    if (options.tier && options.tier !== "all")
+      nodes = nodes.filter((candidate) => candidate.tier === options.tier);
     let edges = this.allEdges;
     if (options.edgeTypes) {
       const allowed = new Set(options.edgeTypes);
@@ -320,7 +434,12 @@ class FakeGraphService implements GraphService {
     }
     const referencedButAbsent = [...referenced].filter((id) => !loaded.has(id)).sort();
 
-    const byEdgeType: Record<EdgeType, number> = { depends_on: 0, blocks: 0, conflicts_with: 0, ownership_overlap: 0 };
+    const byEdgeType: Record<EdgeType, number> = {
+      depends_on: 0,
+      blocks: 0,
+      conflicts_with: 0,
+      ownership_overlap: 0,
+    };
     for (const candidate of edges) byEdgeType[candidate.type] += 1;
 
     return {
@@ -333,7 +452,12 @@ class FakeGraphService implements GraphService {
         tier: options.tier ?? (options.allTasks === true ? "all" : "active"),
         ...(options.status ? { status: options.status } : {}),
         ...(options.domain ? { domain: options.domain } : {}),
-        edgeTypes: options.edgeTypes ?? ["depends_on", "blocks", "conflicts_with", "ownership_overlap"],
+        edgeTypes: options.edgeTypes ?? [
+          "depends_on",
+          "blocks",
+          "conflicts_with",
+          "ownership_overlap",
+        ],
         allTasksMode: options.allTasks === true,
       },
       referencedButAbsent,
@@ -341,17 +465,30 @@ class FakeGraphService implements GraphService {
   }
 }
 
-function neighborhood(focus: string, edges: GraphEdge[], depth: number, nodeIds: Set<string>): Set<string> {
+function neighborhood(
+  focus: string,
+  edges: GraphEdge[],
+  depth: number,
+  nodeIds: Set<string>,
+): Set<string> {
   const included = new Set<string>([focus]);
   let frontier = new Set<string>([focus]);
   let hops = 0;
   while (frontier.size > 0 && (depth < 0 || hops < depth)) {
     const next = new Set<string>();
     for (const candidate of edges) {
-      if (frontier.has(candidate.source) && nodeIds.has(candidate.target) && !included.has(candidate.target)) {
+      if (
+        frontier.has(candidate.source) &&
+        nodeIds.has(candidate.target) &&
+        !included.has(candidate.target)
+      ) {
         next.add(candidate.target);
       }
-      if (frontier.has(candidate.target) && nodeIds.has(candidate.source) && !included.has(candidate.source)) {
+      if (
+        frontier.has(candidate.target) &&
+        nodeIds.has(candidate.source) &&
+        !included.has(candidate.source)
+      ) {
         next.add(candidate.source);
       }
     }
@@ -365,7 +502,11 @@ function neighborhood(focus: string, edges: GraphEdge[], depth: number, nodeIds:
 
 // ── Render helpers ────────────────────────────────────────────────────────
 
-function renderTui(review: FakeReviewService, graph: FakeGraphService, options: { session?: ReviewTuiSession } = {}) {
+function renderTui(
+  review: FakeReviewService,
+  graph: FakeGraphService,
+  options: { session?: ReviewTuiSession } = {},
+) {
   const onOpenPager = vi.fn();
   const rendered = inkTestRender(
     React.createElement(ReviewTui, {
@@ -374,7 +515,7 @@ function renderTui(review: FakeReviewService, graph: FakeGraphService, options: 
       cwd: FAKE_CWD,
       onOpenPager,
       ...(options.session ? { session: options.session } : {}),
-    })
+    }),
   );
   return { ...rendered, onOpenPager };
 }
@@ -417,12 +558,17 @@ describe("task graph TUI layout model", () => {
 
     // Rows within a layer are sorted by task id.
     const focusLayer = layout.placed.filter((entry) => entry.column === 1);
-    expect(focusLayer.map((entry) => entry.node.taskId)).toEqual(["alpha", "epsilon", "omega", "zeta"]);
+    expect(focusLayer.map((entry) => entry.node.taskId)).toEqual([
+      "alpha",
+      "epsilon",
+      "omega",
+      "zeta",
+    ]);
 
     // Dangling dependency edges are retained as layout edges.
     const dangling = layout.edges.find((entry) => entry.edge.target === "missing-ref");
     expect(dangling).toBeDefined();
-    expect(dangling!.b).toBeNull();
+    expect(dangling?.b).toBeNull();
     expect(layout.dangling).toEqual(["missing-ref"]);
   });
 
@@ -431,9 +577,9 @@ describe("task graph TUI layout model", () => {
     const edges = [edge("depends_on", "leaf", "root-a"), edge("depends_on", "leaf", "root-b")];
     const layout = computeLayout(packet(nodes, edges), undefined);
 
-    expect(layout.byId.get("root-a")!.column).toBe(0);
-    expect(layout.byId.get("root-b")!.column).toBe(0);
-    expect(layout.byId.get("leaf")!.column).toBe(1);
+    expect(layout.byId.get("root-a")?.column).toBe(0);
+    expect(layout.byId.get("root-b")?.column).toBe(0);
+    expect(layout.byId.get("leaf")?.column).toBe(1);
   });
 
   it("detects dependency and block cycles deterministically", () => {
@@ -462,7 +608,15 @@ describe("task graph TUI layout model", () => {
 
 describe("task graph TUI integration", () => {
   function harness() {
-    const review = new FakeReviewService(["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "omega"]);
+    const review = new FakeReviewService([
+      "alpha",
+      "beta",
+      "gamma",
+      "delta",
+      "epsilon",
+      "zeta",
+      "omega",
+    ]);
     const graph = new FakeGraphService(richNodes(), richEdges());
     const rendered = renderTui(review, graph);
     return { review, graph, ...rendered };
@@ -526,7 +680,7 @@ describe("task graph TUI integration", () => {
     const review = new FakeReviewService(["alpha"]);
     const onOpenPager = vi.fn();
     const rendered = inkTestRender(
-      React.createElement(ReviewTui, { service: review, cwd: FAKE_CWD, onOpenPager })
+      React.createElement(ReviewTui, { service: review, cwd: FAKE_CWD, onOpenPager }),
     );
     await tick();
     await press(rendered.stdin, "\r");
@@ -539,7 +693,15 @@ describe("task graph TUI integration", () => {
 
 describe("task graph TUI navigation and lenses", () => {
   function harness() {
-    const review = new FakeReviewService(["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "omega"]);
+    const review = new FakeReviewService([
+      "alpha",
+      "beta",
+      "gamma",
+      "delta",
+      "epsilon",
+      "zeta",
+      "omega",
+    ]);
     const graph = new FakeGraphService(richNodes(), richEdges());
     const rendered = renderTui(review, graph);
     return { review, graph, ...rendered };
@@ -644,7 +806,15 @@ describe("task graph TUI navigation and lenses", () => {
   });
 
   it("falls back to an indented focus list with explicit edge labels on narrow terminals", async () => {
-    const review = new FakeReviewService(["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "omega"]);
+    const review = new FakeReviewService([
+      "alpha",
+      "beta",
+      "gamma",
+      "delta",
+      "epsilon",
+      "zeta",
+      "omega",
+    ]);
     const graph = new FakeGraphService(richNodes(), richEdges());
     const { instance, stdout, stdin } = renderNarrowGraph(review, graph, 60);
     await tick();
@@ -667,7 +837,15 @@ describe("task graph TUI navigation and lenses", () => {
   });
 
   it("navigates and drills down on narrow terminals without clipping essential evidence", async () => {
-    const review = new FakeReviewService(["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "omega"]);
+    const review = new FakeReviewService([
+      "alpha",
+      "beta",
+      "gamma",
+      "delta",
+      "epsilon",
+      "zeta",
+      "omega",
+    ]);
     const graph = new FakeGraphService(richNodes(), richEdges());
     const { instance, stdout, stdin } = renderNarrowGraph(review, graph, 60);
     await tick();
@@ -688,7 +866,15 @@ describe("task graph TUI navigation and lenses", () => {
 
 describe("task graph TUI filters and depth", () => {
   function harness() {
-    const review = new FakeReviewService(["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "omega"]);
+    const review = new FakeReviewService([
+      "alpha",
+      "beta",
+      "gamma",
+      "delta",
+      "epsilon",
+      "zeta",
+      "omega",
+    ]);
     const graph = new FakeGraphService(richNodes(), richEdges());
     const rendered = renderTui(review, graph);
     return { review, graph, ...rendered };
@@ -716,9 +902,9 @@ describe("task graph TUI filters and depth", () => {
     await press(stdin, "g");
 
     await press(stdin, "a");
-    const allActiveCall = graph.calls.at(-1)!;
-    expect(allActiveCall.allTasks).toBe(true);
-    expect(allActiveCall.focusTask).toBeUndefined();
+    const allActiveCall = graph.calls.at(-1);
+    expect(allActiveCall?.allTasks).toBe(true);
+    expect(allActiveCall?.focusTask).toBeUndefined();
     expect(lastFrame()).toContain("all-active");
 
     await press(stdin, "a");
@@ -779,7 +965,7 @@ describe("task graph TUI filters and depth", () => {
     await tick();
     const calls = graph.calls;
     expect(calls.at(-1)).toMatchObject({ status: "blocked" });
-    expect(calls.at(-1)!.focusTask).toBeUndefined();
+    expect(calls.at(-1)?.focusTask).toBeUndefined();
     // The filtered node set is still rendered with a sensible selection.
     expect(lastFrame()).toContain("Detail — gamma");
   });
@@ -828,7 +1014,7 @@ describe("task graph TUI filters and depth", () => {
     const review = new FakeReviewService([longId]);
     const graph = new FakeGraphService(
       [node(longId, { receipt: { present: true, health: "passing", isLatestSuperseded: false } })],
-      []
+      [],
     );
     const { lastFrame, stdin } = renderTui(review, graph);
     await tick();
@@ -873,7 +1059,15 @@ describe("task graph TUI layout adaptation", () => {
   });
 
   it("re-layouts from the wide grid to the narrow list and back on resize", async () => {
-    const review = new FakeReviewService(["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "omega"]);
+    const review = new FakeReviewService([
+      "alpha",
+      "beta",
+      "gamma",
+      "delta",
+      "epsilon",
+      "zeta",
+      "omega",
+    ]);
     const graph = new FakeGraphService(richNodes(), richEdges());
     const { instance, stdout, stdin } = renderNarrowGraph(review, graph, 100);
     await tick();
@@ -968,8 +1162,20 @@ function renderNarrowGraph(review: FakeReviewService, graph: FakeGraphService, c
   const stdin = createFakeStdin();
   const onOpenPager = vi.fn();
   const instance = inkRender(
-    React.createElement(ReviewTui, { service: review, graphService: graph, cwd: FAKE_CWD, onOpenPager }),
-    { stdout, stderr, stdin, debug: true, exitOnCtrlC: false, patchConsole: false }
+    React.createElement(ReviewTui, {
+      service: review,
+      graphService: graph,
+      cwd: FAKE_CWD,
+      onOpenPager,
+    }),
+    {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stderr: stderr as unknown as NodeJS.WriteStream,
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      debug: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    },
   );
   return { instance, stdout, stdin };
 }
@@ -1024,9 +1230,9 @@ describe("createGraphService", () => {
             outputs_required: ["files_changed"],
             notes: [],
           },
-          { lineWidth: 0 }
+          { lineWidth: 0 },
         ),
-        "utf-8"
+        "utf-8",
       );
 
       const service = createGraphService(p, cwd);

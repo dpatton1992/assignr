@@ -1,8 +1,8 @@
-import { readdirSync, readFileSync, existsSync } from "fs";
-import { basename, dirname, join } from "path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { parse } from "yaml";
-import { TaskSpecSchema } from "./schema.js";
 import type { LoadedTask } from "./schema.js";
+import { TaskSpecSchema } from "./schema.js";
 
 export type TaskTier = "active" | "completed" | "archived";
 export type LoadTaskTier = TaskTier | "all";
@@ -90,7 +90,7 @@ export function loadTasks(tasksDir: string, tier: LoadTaskTier = "active"): Load
     if (legacyFiles.length > 0) {
       console.warn(
         `\n  ⚠ Migration: ${legacyFiles.length} task file(s) in specs/tasks/ are not visible to manciple commands.` +
-          `\n    Move them to tasks/active/ or run "manciple migrate-tasks" when available.\n`
+          `\n    Move them to tasks/active/ or run "manciple migrate-tasks" when available.\n`,
       );
     }
   }
@@ -156,7 +156,7 @@ function addWarningsForPatterns(
   targetAllowedPaths: string[],
   ownerTaskId: string,
   kind: PathOwnershipWarningKind,
-  ownerPaths: string[]
+  ownerPaths: string[],
 ): void {
   for (const affectedPath of targetAllowedPaths) {
     for (const ownerPath of ownerPaths) {
@@ -174,7 +174,7 @@ function addWarningsForPatterns(
 
 export function pathOwnershipWarningsForTask(
   target: LoadedTaskWithTier,
-  tasks: LoadedTaskWithTier[]
+  tasks: LoadedTaskWithTier[],
 ): PathOwnershipWarning[] {
   const allowedPaths = target.spec.allowed_paths ?? [];
   if (allowedPaths.length === 0) return [];
@@ -186,22 +186,18 @@ export function pathOwnershipWarningsForTask(
 
     const ownership = task.spec.path_ownership;
     const touchedPaths =
-      ownership.touched_paths.length > 0 ? ownership.touched_paths : task.spec.allowed_paths ?? [];
+      ownership.touched_paths.length > 0
+        ? ownership.touched_paths
+        : (task.spec.allowed_paths ?? []);
 
     addWarningsForPatterns(warnings, allowedPaths, task.spec.id, "touched", touchedPaths);
-    addWarningsForPatterns(
-      warnings,
-      allowedPaths,
-      task.spec.id,
-      "locked",
-      ownership.locked_paths
-    );
+    addWarningsForPatterns(warnings, allowedPaths, task.spec.id, "locked", ownership.locked_paths);
     addWarningsForPatterns(
       warnings,
       allowedPaths,
       task.spec.id,
       "unsafe_parallel_area",
-      ownership.unsafe_parallel_areas
+      ownership.unsafe_parallel_areas,
     );
   }
 

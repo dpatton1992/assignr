@@ -1,14 +1,4 @@
-import type { ManciplePaths } from "../utils/paths.js";
-import {
-  getReviewQueue,
-  getTaskReviewPacket,
-} from "../review/reviewPacket.js";
-import type {
-  ReviewDecisionId,
-  ReviewPacket,
-  ReviewPacketContext,
-  ReviewQueueSummary,
-} from "../review/reviewPacket.js";
+import type { ReviewActionOptions, ReviewActionResult } from "../review/reviewActions.js";
 import {
   approveTask,
   blockReview,
@@ -16,7 +6,14 @@ import {
   reopenTask,
   requestChanges,
 } from "../review/reviewActions.js";
-import type { ReviewActionOptions, ReviewActionResult } from "../review/reviewActions.js";
+import type {
+  ReviewDecisionId,
+  ReviewPacket,
+  ReviewPacketContext,
+  ReviewQueueSummary,
+} from "../review/reviewPacket.js";
+import { getReviewQueue, getTaskReviewPacket } from "../review/reviewPacket.js";
+import type { ManciplePaths } from "../utils/paths.js";
 
 /**
  * ReviewService is the only data boundary the TUI depends on. Components must
@@ -30,11 +27,7 @@ import type { ReviewActionOptions, ReviewActionResult } from "../review/reviewAc
 export interface ReviewService {
   getQueue(): ReviewQueueSummary;
   getPacket(taskId: string): ReviewPacket;
-  applyDecision(
-    action: ReviewDecisionId,
-    taskId: string,
-    reason?: string
-  ): ReviewActionResult;
+  applyDecision(action: ReviewDecisionId, taskId: string, reason?: string): ReviewActionResult;
 }
 
 export function createReviewService(p: ManciplePaths, cwd: string): ReviewService {

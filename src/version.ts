@@ -1,4 +1,4 @@
-import { createRequire } from "module";
+import { createRequire } from "node:module";
 
 // Single source of truth for the Manciple package version. The loader resolves
 // package.json relative to this module, so it works both from source execution

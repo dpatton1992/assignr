@@ -1,23 +1,16 @@
-import { spawnSync } from "child_process";
-import { basename, dirname, join, relative } from "path";
-import { loadTasks } from "../specs/loadTasks.js";
+import { spawnSync } from "node:child_process";
+import { basename, dirname, join, relative } from "node:path";
 import type { LoadedTaskWithTier, TaskTier } from "../specs/loadTasks.js";
+import { loadTasks } from "../specs/loadTasks.js";
 import type { TaskSpec } from "../specs/schema.js";
-import { evaluateReviewReadiness, verificationCommandsMatch } from "./readiness.js";
-import type {
-  ReviewReadinessReport,
-  ReviewReadinessRunLog,
-} from "./readiness.js";
-import {
-  parseRunLogEvidence,
-  readGitChangedFiles,
-  readLatestRunLogContent,
-} from "./evidence.js";
-import { evaluateDeterministicReviewGate } from "./deterministicGate.js";
-import type { DeterministicReviewBlocker } from "./deterministicGate.js";
 import { pathMatchesPattern } from "../utils/pathUtils.js";
-import { getManagedWorktree, isGitRepository } from "../worktrees/manager.js";
 import type { ManagedWorktreeRecord } from "../worktrees/manager.js";
+import { getManagedWorktree, isGitRepository } from "../worktrees/manager.js";
+import type { DeterministicReviewBlocker } from "./deterministicGate.js";
+import { evaluateDeterministicReviewGate } from "./deterministicGate.js";
+import { parseRunLogEvidence, readGitChangedFiles, readLatestRunLogContent } from "./evidence.js";
+import type { ReviewReadinessReport, ReviewReadinessRunLog } from "./readiness.js";
+import { evaluateReviewReadiness, verificationCommandsMatch } from "./readiness.js";
 
 /**
  * ReviewPacket is the read-only application boundary for review presentation.
@@ -78,12 +71,7 @@ export interface ReviewDiffSummary {
   deletions?: number;
 }
 
-export type ReviewDecisionId =
-  | "approve"
-  | "request_changes"
-  | "reject"
-  | "block"
-  | "reopen";
+export type ReviewDecisionId = "approve" | "request_changes" | "reject" | "block" | "reopen";
 
 export interface ReviewDecision {
   id: ReviewDecisionId;
@@ -205,16 +193,13 @@ function runLogChangedFiles(runLogs: readonly ReviewReadinessRunLog[]): string[]
 function changedPathsFor(
   runLogs: readonly ReviewReadinessRunLog[],
   gitChangedFiles: string[],
-  spec: TaskSpec
+  spec: TaskSpec,
 ): { changedPaths: ReviewChangedPath[]; source: ChangedPathSource } {
   const runLogFiles = new Set(runLogChangedFiles(runLogs));
   const gitFiles = unique(gitChangedFiles);
   const allFiles = unique([...runLogFiles, ...gitFiles]);
-  const source: ChangedPathSource = runLogFiles.size > 0
-    ? "run-log"
-    : gitFiles.length > 0
-      ? "git-status"
-      : "unavailable";
+  const source: ChangedPathSource =
+    runLogFiles.size > 0 ? "run-log" : gitFiles.length > 0 ? "git-status" : "unavailable";
   const allowed = spec.allowed_paths ?? [];
   const forbidden = spec.forbidden_paths ?? [];
 
@@ -224,7 +209,8 @@ function changedPathsFor(
     return {
       path,
       source: pathSource,
-      inAllowedPaths: allowed.length === 0 || allowed.some((pattern) => pathMatchesPattern(path, pattern)),
+      inAllowedPaths:
+        allowed.length === 0 || allowed.some((pattern) => pathMatchesPattern(path, pattern)),
       inForbiddenPaths: forbiddenPattern !== undefined,
       ...(forbiddenPattern ? { forbiddenPattern } : {}),
     };
@@ -237,7 +223,7 @@ function scopeDriftFor(
   spec: TaskSpec,
   runLogs: readonly ReviewReadinessRunLog[],
   gitChangedFiles: string[],
-  source: ChangedPathSource
+  source: ChangedPathSource,
 ): ReviewScopeDrift {
   const runLogFiles = new Set(runLogChangedFiles(runLogs));
   const gitFiles = unique(gitChangedFiles);
@@ -250,11 +236,14 @@ function scopeDriftFor(
     return pattern ? [{ path, pattern }] : [];
   });
   const forbiddenSet = new Set(forbiddenPaths.map((entry) => entry.path));
-  const outOfScopePaths = allowed.length === 0
-    ? []
-    : allFiles.filter(
-        (path) => !forbiddenSet.has(path) && !allowed.some((pattern) => pathMatchesPattern(path, pattern))
-      );
+  const outOfScopePaths =
+    allowed.length === 0
+      ? []
+      : allFiles.filter(
+          (path) =>
+            !forbiddenSet.has(path) &&
+            !allowed.some((pattern) => pathMatchesPattern(path, pattern)),
+        );
 
   return {
     source,
@@ -270,7 +259,7 @@ function scopeDriftFor(
 function acceptanceCriteriaFor(
   spec: TaskSpec,
   runLogs: readonly ReviewReadinessRunLog[],
-  uncoveredCriteria: string[]
+  uncoveredCriteria: string[],
 ): ReviewAcceptanceCriterion[] {
   const entries = runLogs.flatMap((log) => log.acceptanceCriteriaEvidence ?? []);
   const evidenceByCriterion = new Map<string, string>();
@@ -306,7 +295,7 @@ function acceptanceCriteriaFor(
  */
 function requiredCommandOutcomes(
   requiredCommands: string[],
-  runLogs: readonly ReviewReadinessRunLog[]
+  runLogs: readonly ReviewReadinessRunLog[],
 ): ReviewCommandOutcome[] {
   const results = runLogs.flatMap((log) => log.commandResults ?? []);
   const recordedCommands = runLogs.flatMap((log) => [
@@ -315,15 +304,16 @@ function requiredCommandOutcomes(
     ...(log.verificationCommands ?? []),
   ]);
   const receiptFailed = runLogs.some((log) =>
-    (log.verificationResults ?? []).some((result) => /\b(?:fail|error|non[- ]?zero)\b/i.test(result))
+    (log.verificationResults ?? []).some((result) =>
+      /\b(?:fail|error|non[- ]?zero)\b/i.test(result),
+    ),
   );
 
   return requiredCommands.map((command) => {
     const result = results.find((entry) => verificationCommandsMatch(command, entry.command));
     if (result) {
-      const status = result.status === "passed" || result.status === "failed"
-        ? result.status
-        : "skipped";
+      const status =
+        result.status === "passed" || result.status === "failed" ? result.status : "skipped";
       return {
         command,
         status,
@@ -331,7 +321,11 @@ function requiredCommandOutcomes(
       };
     }
     if (recordedCommands.some((entry) => verificationCommandsMatch(command, entry))) {
-      return { command, status: "skipped" as const, detail: "recorded without a structured result" };
+      return {
+        command,
+        status: "skipped" as const,
+        detail: "recorded without a structured result",
+      };
     }
     if (receiptFailed) {
       return { command, status: "failed" as const, detail: "verification receipt reports failure" };
@@ -340,7 +334,10 @@ function requiredCommandOutcomes(
   });
 }
 
-function dependencyStatusesFor(spec: TaskSpec, allTasks: LoadedTaskWithTier[]): ReviewDependencyStatus[] {
+function dependencyStatusesFor(
+  spec: TaskSpec,
+  allTasks: LoadedTaskWithTier[],
+): ReviewDependencyStatus[] {
   return (spec.depends_on ?? []).map((depId) => {
     const dep = allTasks.find((task) => task.spec.id === depId);
     return {
@@ -351,7 +348,10 @@ function dependencyStatusesFor(spec: TaskSpec, allTasks: LoadedTaskWithTier[]): 
   });
 }
 
-function gitDiffLineStats(cwd: string, baseSha?: string): { insertions?: number; deletions?: number } {
+function gitDiffLineStats(
+  cwd: string,
+  baseSha?: string,
+): { insertions?: number; deletions?: number } {
   const result = spawnSync("git", ["diff", baseSha ?? "HEAD", "--numstat"], {
     cwd,
     encoding: "utf8",
@@ -381,7 +381,10 @@ function mancipleRootFromSpecsTasks(specsTasksDir: string): string {
   return dirname(specsTasksDir);
 }
 
-function managedWorktreeFor(taskId: string, context: ReviewPacketContext): ManagedWorktreeRecord | undefined {
+function managedWorktreeFor(
+  taskId: string,
+  context: ReviewPacketContext,
+): ManagedWorktreeRecord | undefined {
   if (!isGitRepository(context.cwd)) return undefined;
   return getManagedWorktree(taskId, {
     controlRepo: context.cwd,
@@ -399,15 +402,17 @@ function availableDecisionsFor(task: LoadedTaskWithTier): ReviewDecision[] {
   if (task.tier === "active" && task.spec.status === "needs_review") {
     return [
       { id: "approve", label: "Approve and move the task to completed", enabled: true },
-      { id: "request_changes", label: "Request changes and return the task to in_progress", enabled: true },
+      {
+        id: "request_changes",
+        label: "Request changes and return the task to in_progress",
+        enabled: true,
+      },
       { id: "reject", label: "Reject the task and move it to failed", enabled: true },
       { id: "block", label: "Block review and set the task to blocked", enabled: true },
     ];
   }
   if (task.tier === "completed" || task.tier === "archived") {
-    return [
-      { id: "reopen", label: "Reopen the task to in_progress", enabled: true },
-    ];
+    return [{ id: "reopen", label: "Reopen the task to in_progress", enabled: true }];
   }
   return [];
 }
@@ -463,13 +468,17 @@ export function getTaskReviewPacket(taskId: string, context: ReviewPacketContext
     goal: found.spec.goal,
     worktree: {
       managed: Boolean(worktree),
-      workspacePath: worktree ? relative(context.cwd, worktree.workspacePath).replace(/\\/g, "/") : ".",
-      ...(worktree ? {
-        branch: worktree.branch,
-        baseSha: worktree.baseSha,
-        headSha: gitHead(worktree.workspacePath),
-        claimState: worktree.claimState,
-      } : {}),
+      workspacePath: worktree
+        ? relative(context.cwd, worktree.workspacePath).replace(/\\/g, "/")
+        : ".",
+      ...(worktree
+        ? {
+            branch: worktree.branch,
+            baseSha: worktree.baseSha,
+            headSha: gitHead(worktree.workspacePath),
+            claimState: worktree.claimState,
+          }
+        : {}),
       dirty: readGitChangedFiles(evidenceCwd).length > 0,
     },
     claimedScope: {
@@ -482,13 +491,13 @@ export function getTaskReviewPacket(taskId: string, context: ReviewPacketContext
     acceptanceCriteria: acceptanceCriteriaFor(
       found.spec,
       runLogs,
-      readiness.uncoveredAcceptanceCriteria
+      readiness.uncoveredAcceptanceCriteria,
     ),
     verification: {
       requiredCommands: found.spec.verification.commands,
       commandOutcomes,
       failedOrMissingChecks: commandOutcomes.filter(
-        (outcome) => outcome.status === "failed" || outcome.status === "missing"
+        (outcome) => outcome.status === "failed" || outcome.status === "missing",
       ),
       hasVerification: readiness.hasVerification,
     },
@@ -521,7 +530,10 @@ export function getTaskReviewPacket(taskId: string, context: ReviewPacketContext
   };
 }
 
-export function getScopeDrift(taskId: string, context: ReviewPacketContext): ReviewScopeDriftReport {
+export function getScopeDrift(
+  taskId: string,
+  context: ReviewPacketContext,
+): ReviewScopeDriftReport {
   const found = findTaskOrThrow(taskId, context);
   const runLogs = parseRunLogEvidence(readLatestRunLogContent(context.cwd, taskId));
   const worktree = managedWorktreeFor(taskId, context);

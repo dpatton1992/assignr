@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Box, Text, useApp, useInput, useStdout } from "ink";
 import type { Key } from "ink";
+import { Box, Text, useApp, useInput, useStdout } from "ink";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ReviewDecision,
   ReviewDecisionId,
@@ -8,11 +9,11 @@ import type {
   ReviewQueueRow,
   ReviewQueueSummary,
 } from "../review/reviewPacket.js";
-import type { ReviewService } from "./service.js";
 import type { GraphService } from "./graphService.js";
 import { GraphView } from "./graphView.js";
-import { buildDiffContent } from "./pager.js";
 import type { CommandRunner } from "./pager.js";
+import { buildDiffContent } from "./pager.js";
+import type { ReviewService } from "./service.js";
 
 /**
  * ReviewTui is the interactive review dashboard.
@@ -119,7 +120,8 @@ export function formatReceipt(packet: ReviewPacket): string {
   const parts: string[] = [];
   if (packet.receipt.result) parts.push(`result: ${packet.receipt.result}`);
   if (packet.receipt.verificationReceipt) parts.push(packet.receipt.verificationReceipt);
-  if (packet.receipt.receiptParseError) parts.push(`receipt parse error: ${packet.receipt.receiptParseError}`);
+  if (packet.receipt.receiptParseError)
+    parts.push(`receipt parse error: ${packet.receipt.receiptParseError}`);
   if (parts.length === 0) return "No verification receipt on record.";
   return parts.join("\n");
 }
@@ -130,7 +132,7 @@ function detailLines(packet: ReviewPacket): string[] {
   lines.push(
     `status: ${packet.status} (${packet.tier}) · readiness ${packet.readiness.score}/100 · ${
       packet.readiness.ready ? "ready" : "not ready"
-    }`
+    }`,
   );
   lines.push(`domain: ${packet.domain} · priority: ${packet.priority}`);
   lines.push("");
@@ -145,13 +147,16 @@ function detailLines(packet: ReviewPacket): string[] {
   ].join(" · ");
   lines.push(`Scope drift: ${driftNote}${drift.hasDrift ? "  ⚠ DRIFT" : ""}`);
   for (const path of drift.outOfScopePaths) lines.push(`  out of scope: ${path}`);
-  for (const entry of drift.forbiddenPaths) lines.push(`  forbidden: ${entry.path} (${entry.pattern})`);
+  for (const entry of drift.forbiddenPaths)
+    lines.push(`  forbidden: ${entry.path} (${entry.pattern})`);
 
   const diffStats =
     packet.diffSummary.insertions !== undefined || packet.diffSummary.deletions !== undefined
       ? ` · +${packet.diffSummary.insertions ?? 0} −${packet.diffSummary.deletions ?? 0}`
       : "";
-  lines.push(`Changed files: ${packet.diffSummary.changedFileCount} (${packet.diffSummary.source})${diffStats}`);
+  lines.push(
+    `Changed files: ${packet.diffSummary.changedFileCount} (${packet.diffSummary.source})${diffStats}`,
+  );
   for (const changed of packet.changedPaths) {
     lines.push(`  ${changed.source === "run-log" ? "log" : "git"} ${changed.path}`);
   }
@@ -170,7 +175,10 @@ function detailLines(packet: ReviewPacket): string[] {
     lines.push(`  ${outcome.status}: ${outcome.command}${detail}`);
   }
 
-  const risks = packet.risks.length > 0 ? packet.risks.map((risk) => `"${risk}"`).join("; ") : "none documented";
+  const risks =
+    packet.risks.length > 0
+      ? packet.risks.map((risk) => `"${risk}"`).join("; ")
+      : "none documented";
   lines.push(`Risks: ${risks}`);
 
   const notes = packet.workerNotes;
@@ -183,24 +191,32 @@ function detailLines(packet: ReviewPacket): string[] {
   lines.push(`Worker: ${notesParts.join(" · ")}`);
 
   const receiptParts = [
-    packet.receipt.hasVerificationReceipt ? "verification receipt present" : "no verification receipt",
+    packet.receipt.hasVerificationReceipt
+      ? "verification receipt present"
+      : "no verification receipt",
     ...(packet.receipt.result ? [`result: ${packet.receipt.result}`] : []),
-    ...(packet.receipt.receiptParseError ? [`parse error: ${packet.receipt.receiptParseError}`] : []),
+    ...(packet.receipt.receiptParseError
+      ? [`parse error: ${packet.receipt.receiptParseError}`]
+      : []),
   ];
   lines.push(`Receipt: ${receiptParts.join(" · ")}`);
 
   const dependencies =
     packet.dependencies.length === 0
       ? "none"
-      : packet.dependencies.map((dependency) => `${dependency.taskId}:${dependency.status}`).join(", ");
+      : packet.dependencies
+          .map((dependency) => `${dependency.taskId}:${dependency.status}`)
+          .join(", ");
   lines.push(`Dependencies: ${dependencies}`);
 
   const warnings =
-    packet.warnings.length === 0 ? "none" : packet.warnings.map((warning) => `"${warning}"`).join("; ");
+    packet.warnings.length === 0
+      ? "none"
+      : packet.warnings.map((warning) => `"${warning}"`).join("; ");
   lines.push(`Warnings: ${warnings}`);
 
   lines.push(
-    `Available decisions: ${packet.availableDecisions.map((decision) => decision.id).join(", ") || "none"}`
+    `Available decisions: ${packet.availableDecisions.map((decision) => decision.id).join(", ") || "none"}`,
   );
   return lines;
 }
@@ -217,17 +233,26 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
   const [packet, setPacket] = useState<ReviewPacket | null>(null);
   const [packetError, setPacketError] = useState<string | null>(null);
   const [scroll, setScroll] = useState(() => session?.scroll ?? 0);
-  const [confirmAction, setConfirmAction] = useState<{ action: ReviewDecisionId; decision: ReviewDecision } | null>(null);
-  const [reasonAction, setReasonAction] = useState<{ action: "request_changes" | "reject"; decision: ReviewDecision } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    action: ReviewDecisionId;
+    decision: ReviewDecision;
+  } | null>(null);
+  const [reasonAction, setReasonAction] = useState<{
+    action: "request_changes" | "reject";
+    decision: ReviewDecision;
+  } | null>(null);
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   /** Graph overlay: focused task and the review view to return to. */
-  const [graphFocus, setGraphFocus] = useState<{ taskId: string; from: "list" | "detail" } | null>(null);
+  const [graphFocus, setGraphFocus] = useState<{ taskId: string; from: "list" | "detail" } | null>(
+    null,
+  );
 
   // Restore the pre-pager session when the launcher re-renders after a pager
   // round-trip (selected task, view, and scroll position).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: this effect intentionally restores a pre-pager session once on mount; adding deps re-runs it during user scrolling and resets the scroll position.
   useEffect(() => {
     if (!session?.selectedTaskId || view === "list") return;
     try {
@@ -239,7 +264,6 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
       setPacketError(error instanceof Error ? error.message : String(error));
       setPacket(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist the session so the launcher can re-render after opening a pager.
@@ -486,7 +510,7 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
   const terminalRows = stdout.rows;
   const detailWindow = Math.max(
     4,
-    Math.min(windowHeight ?? (terminalRows ? terminalRows - 8 : 14), 40)
+    Math.min(windowHeight ?? (terminalRows ? terminalRows - 8 : 14), 40),
   );
 
   let body: React.ReactNode;
@@ -496,7 +520,8 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
       <Box flexDirection="column">
         <Text bold>Confirm {confirmAction.action}</Text>
         <Text>
-          {packet.taskId}: this moves the task from {packet.status} to {nextStatusFor(confirmAction.action)}.
+          {packet.taskId}: this moves the task from {packet.status} to{" "}
+          {nextStatusFor(confirmAction.action)}.
         </Text>
         <Text dimColor>Press y to confirm, n or Escape to cancel.</Text>
       </Box>
@@ -505,7 +530,8 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
     body = (
       <Box flexDirection="column">
         <Text bold>
-          {reasonAction.action === "request_changes" ? "Request changes" : "Reject"} — {packet.taskId}
+          {reasonAction.action === "request_changes" ? "Request changes" : "Reject"} —{" "}
+          {packet.taskId}
         </Text>
         <Text>
           This moves the task from {packet.status} to{" "}
@@ -538,7 +564,9 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
         {rows.length === 0 ? (
           <Box flexDirection="column">
             <Text>No tasks in needs_review, blocked, or completed.</Text>
-            <Text dimColor>Create tasks with `manciple task new` to populate the review queue.</Text>
+            <Text dimColor>
+              Create tasks with `manciple task new` to populate the review queue.
+            </Text>
           </Box>
         ) : (
           <Box flexDirection="column">
@@ -560,9 +588,13 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
                     const index = rows.indexOf(flat);
                     const selected = index === selectedIndex;
                     return (
-                      <Text key={flat.row.taskId} color={selected ? "cyan" : undefined} inverse={selected}>
+                      <Text
+                        key={flat.row.taskId}
+                        color={selected ? "cyan" : undefined}
+                        inverse={selected}
+                      >
                         {selected ? "› " : "  "}
-                        {flat.row.taskId}  {flat.row.title}  [{flat.row.priority}] {flat.row.domain}
+                        {`${flat.row.taskId}  ${flat.row.title}  [${flat.row.priority}] ${flat.row.domain}`}
                       </Text>
                     );
                   })}
@@ -584,15 +616,18 @@ export function ReviewTui(props: ReviewTuiProps): React.ReactElement {
         </Text>
         {actionError ? <Text color="red">Action failed: {actionError}</Text> : null}
         {packetError ? <Text color="red">{packetError}</Text> : null}
-        {!packet && packetError ? <Text dimColor>Press q or Escape to return to the queue.</Text> : null}
+        {!packet && packetError ? (
+          <Text dimColor>Press q or Escape to return to the queue.</Text>
+        ) : null}
         {packet ? (
           <>
             {visibleLines.map((line, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: scroll-window rows have no stable id and line text can repeat; `scroll + index` is the unique per-row key.
               <Text key={scroll + index}>{line}</Text>
             ))}
             <Text dimColor>
-              d diff · r receipt · t tests · g {graphService ? "graph" : "deps"} · a approve · e changes · x reject ·
-              o reopen · ↑↓/jk scroll · q back
+              d diff · r receipt · t tests · g {graphService ? "graph" : "deps"} · a approve · e
+              changes · x reject · o reopen · ↑↓/jk scroll · q back
             </Text>
           </>
         ) : null}

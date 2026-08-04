@@ -82,22 +82,25 @@ function hasExplicitValue(value: string | null | undefined): boolean {
 }
 
 function runLogCommands(runLogs: readonly ReviewReadinessRunLog[]): string[] {
-  return presentValues(runLogs.flatMap((log) => [
-    ...(log.commandsRun ?? []),
-    ...(log.testsRun ?? []),
-    ...(log.verificationCommands ?? []),
-    ...(log.commandResults ?? []).map((result) => result.command),
-  ]));
+  return presentValues(
+    runLogs.flatMap((log) => [
+      ...(log.commandsRun ?? []),
+      ...(log.testsRun ?? []),
+      ...(log.verificationCommands ?? []),
+      ...(log.commandResults ?? []).map((result) => result.command),
+    ]),
+  );
 }
 
 function hasRecordedVerificationResult(runLogs: readonly ReviewReadinessRunLog[]): boolean {
-  return runLogs.some((log) => (
-    presentValues(log.verificationResults).length > 0 ||
-    hasExplicitValue(log.result) ||
-    (log.commandResults ?? []).some((result) => (
-      hasExplicitValue(result.result) || hasExplicitValue(result.status)
-    ))
-  ));
+  return runLogs.some(
+    (log) =>
+      presentValues(log.verificationResults).length > 0 ||
+      hasExplicitValue(log.result) ||
+      (log.commandResults ?? []).some(
+        (result) => hasExplicitValue(result.result) || hasExplicitValue(result.status),
+      ),
+  );
 }
 
 function escapeRegExp(value: string): string {
@@ -125,24 +128,35 @@ export function verificationCommandsMatch(expected: string, recorded: string): b
 
   if (commandBodiesMatch(expectedValue, recordedValue)) return true;
 
-  const receipt = recordedValue.match(
-    /^(.*?)(?::\s*|\s+(?:->|=>|[-–—])\s+|\s+\()(.+?)(?:\))?$/
-  );
+  const receipt = recordedValue.match(/^(.*?)(?::\s*|\s+(?:->|=>|[-–—])\s+|\s+\()(.+?)(?:\))?$/);
   if (!receipt) return false;
 
   const [, command, details] = receipt;
-  return commandBodiesMatch(expectedValue, command.trim()) &&
-    /\b(?:pass(?:ed|ing)?|ok|success(?:ful)?|fail(?:ed|ing)?|error|exit(?:ed)?\s+(?:code\s+)?\d+|non[- ]?zero)\b/i.test(details);
+  return (
+    commandBodiesMatch(expectedValue, command.trim()) &&
+    /\b(?:pass(?:ed|ing)?|ok|success(?:ful)?|fail(?:ed|ing)?|error|exit(?:ed)?\s+(?:code\s+)?\d+|non[- ]?zero)\b/i.test(
+      details,
+    )
+  );
 }
 
-function missingExpectedCommands(expected: readonly string[], recorded: readonly string[]): string[] {
-  return expected.filter((expectedCommand) => (
-    !recorded.some((recordedCommand) => verificationCommandsMatch(expectedCommand, recordedCommand))
-  ));
+function missingExpectedCommands(
+  expected: readonly string[],
+  recorded: readonly string[],
+): string[] {
+  return expected.filter(
+    (expectedCommand) =>
+      !recorded.some((recordedCommand) =>
+        verificationCommandsMatch(expectedCommand, recordedCommand),
+      ),
+  );
 }
 
 function normalizeReceiptField(field: string): string {
-  return field.trim().toLowerCase().replace(/[-\s]+/g, "_");
+  return field
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
 }
 
 function receiptFieldIsPresent(
@@ -150,7 +164,7 @@ function receiptFieldIsPresent(
   runLogs: readonly ReviewReadinessRunLog[],
   changedFilesSource: ChangedFilesSource,
   hasVerificationEvidence: boolean,
-  hasRisks: boolean
+  hasRisks: boolean,
 ): boolean {
   switch (normalizeReceiptField(field)) {
     case "files_changed":
@@ -167,17 +181,24 @@ function receiptFieldIsPresent(
     case "follow_up_tasks":
       return runLogs.some((log) => presentValues(log.followUps).length > 0);
     default:
-      return runLogs.some((log) => (
-        presentValues(log.decisionsMade).some((value) => value.toLowerCase().includes(field.toLowerCase())) ||
-        presentValues(log.followUps).some((value) => value.toLowerCase().includes(field.toLowerCase())) ||
-        hasExplicitValue(log.notes) && log.notes!.toLowerCase().includes(field.toLowerCase())
-      ));
+      return runLogs.some(
+        (log) =>
+          presentValues(log.decisionsMade).some((value) =>
+            value.toLowerCase().includes(field.toLowerCase()),
+          ) ||
+          presentValues(log.followUps).some((value) =>
+            value.toLowerCase().includes(field.toLowerCase()),
+          ) ||
+          (hasExplicitValue(log.notes) && log.notes?.toLowerCase().includes(field.toLowerCase())),
+      );
   }
 }
 
 function isExplicitNone(value: string): boolean {
   const normalized = value.trim();
-  return /^(?:none|n\/a|no(?:\s+[\w-]+)*\s+risks?(?:\s+(?:identified|remain(?:ing)?))?)\.?$/i.test(normalized);
+  return /^(?:none|n\/a|no(?:\s+[\w-]+)*\s+risks?(?:\s+(?:identified|remain(?:ing)?))?)\.?$/i.test(
+    normalized,
+  );
 }
 
 function documentedRisks(runLogs: readonly ReviewReadinessRunLog[]): string[] {
@@ -189,41 +210,53 @@ function tokenEstimateSections(runLogs: readonly ReviewReadinessRunLog[]): strin
 }
 
 function hasOverBudgetTokenEstimate(runLogs: readonly ReviewReadinessRunLog[]): boolean {
-  return tokenEstimateSections(runLogs).some((section) => /Budget warning:\s*over budget\b/i.test(section));
+  return tokenEstimateSections(runLogs).some((section) =>
+    /Budget warning:\s*over budget\b/i.test(section),
+  );
 }
 
 function hasWarningOnlyBudgetConfirmation(runLogs: readonly ReviewReadinessRunLog[]): boolean {
-  const searchable = presentValues(runLogs.flatMap((log) => [
-    log.tokenEstimate,
-    log.risks,
-    log.notes,
-    ...(log.decisionsMade ?? []),
-    ...(log.acceptanceCriteriaEvidence ?? []).map((entry) => entry.evidence),
-  ])).join("\n");
+  const searchable = presentValues(
+    runLogs.flatMap((log) => [
+      log.tokenEstimate,
+      log.risks,
+      log.notes,
+      ...(log.decisionsMade ?? []),
+      ...(log.acceptanceCriteriaEvidence ?? []).map((entry) => entry.evidence),
+    ]),
+  ).join("\n");
 
-  return /\bwarning[- ]only\b/i.test(searchable) || /Warning only;\s*no workflow failed\./i.test(searchable);
+  return (
+    /\bwarning[- ]only\b/i.test(searchable) ||
+    /Warning only;\s*no workflow failed\./i.test(searchable)
+  );
 }
 
 function failedVerificationCommands(runLogs: readonly ReviewReadinessRunLog[]): string[] {
-  const failedFromResults = runLogs.flatMap((log) => (
-    log.commandResults ?? []
-  ).filter((result) => {
-    const status = result.status?.toLowerCase() ?? "";
-    if (/\b(pass|passed|ok|success|successful)\b/.test(status)) return false;
-    if (/\b(fail|failed|error|non-zero|nonzero)\b/.test(status)) return true;
-    return /\b(fail|failed|error|non-zero|nonzero)\b/i.test(result.result ?? "");
-  }).map((result) => result.command));
+  const failedFromResults = runLogs.flatMap((log) =>
+    (log.commandResults ?? [])
+      .filter((result) => {
+        const status = result.status?.toLowerCase() ?? "";
+        if (/\b(pass|passed|ok|success|successful)\b/.test(status)) return false;
+        if (/\b(fail|failed|error|non-zero|nonzero)\b/.test(status)) return true;
+        return /\b(fail|failed|error|non-zero|nonzero)\b/i.test(result.result ?? "");
+      })
+      .map((result) => result.command),
+  );
 
-  const failedFromText = runLogs.flatMap((log) => presentValues(log.verificationResults))
+  const failedFromText = runLogs
+    .flatMap((log) => presentValues(log.verificationResults))
     .filter((result) => /\b(fail|failed|error|non-zero|nonzero)\b/i.test(result));
 
   const failedFromOutcome = runLogs
     .filter((log) => /\b(failed|blocked)\b/i.test(log.result ?? ""))
-    .flatMap((log) => presentValues([
-      ...(log.commandsRun ?? []),
-      ...(log.testsRun ?? []),
-      ...(log.verificationCommands ?? []),
-    ]));
+    .flatMap((log) =>
+      presentValues([
+        ...(log.commandsRun ?? []),
+        ...(log.testsRun ?? []),
+        ...(log.verificationCommands ?? []),
+      ]),
+    );
 
   return presentValues([...failedFromResults, ...failedFromText, ...failedFromOutcome]);
 }
@@ -232,12 +265,18 @@ function changedFilesFromRunLogs(runLogs: readonly ReviewReadinessRunLog[]): str
   return presentValues(runLogs.flatMap((log) => log.filesChanged ?? []));
 }
 
-function pathOverlaps(runLogs: readonly ReviewReadinessRunLog[], gitChangedFiles: readonly string[] | undefined): string[] {
+function pathOverlaps(
+  runLogs: readonly ReviewReadinessRunLog[],
+  gitChangedFiles: readonly string[] | undefined,
+): string[] {
   const receiptFiles = new Set(changedFilesFromRunLogs(runLogs));
   return presentValues(gitChangedFiles).filter((file) => receiptFiles.has(file));
 }
 
-function acceptanceCoverage(spec: TaskSpec, runLogs: readonly ReviewReadinessRunLog[]): {
+function acceptanceCoverage(
+  spec: TaskSpec,
+  runLogs: readonly ReviewReadinessRunLog[],
+): {
   uncovered: string[];
   unmapped: string[];
 } {
@@ -264,22 +303,21 @@ function acceptanceCoverage(spec: TaskSpec, runLogs: readonly ReviewReadinessRun
     });
   }
 
-  const unmapped = presentValues(evidence
-    .filter((_entry, index) => !mappedEvidenceIndexes.has(index))
-    .map((entry) => entry.evidence
-      ? `${entry.criterion}: ${entry.evidence}`
-      : entry.criterion));
+  const unmapped = presentValues(
+    evidence
+      .filter((_entry, index) => !mappedEvidenceIndexes.has(index))
+      .map((entry) => (entry.evidence ? `${entry.criterion}: ${entry.evidence}` : entry.criterion)),
+  );
 
-  const searchableEvidence = presentValues(runLogs.flatMap((log) => [
-    ...(log.decisionsMade ?? []),
-    ...(log.followUps ?? []),
-    log.notes,
-  ])).join("\n").toLowerCase();
+  const searchableEvidence = presentValues(
+    runLogs.flatMap((log) => [...(log.decisionsMade ?? []), ...(log.followUps ?? []), log.notes]),
+  )
+    .join("\n")
+    .toLowerCase();
 
-  const uncovered = spec.acceptance_criteria.filter((criterion) => (
-    !covered.has(criterion) &&
-    !searchableEvidence.includes(criterion.toLowerCase())
-  ));
+  const uncovered = spec.acceptance_criteria.filter(
+    (criterion) => !covered.has(criterion) && !searchableEvidence.includes(criterion.toLowerCase()),
+  );
 
   return { uncovered, unmapped };
 }
@@ -295,7 +333,7 @@ function sentence(text: string): string {
 
 export function evaluateReviewReadiness(
   task: LoadedTask | TaskSpec,
-  evidence: ReviewReadinessEvidence = {}
+  evidence: ReviewReadinessEvidence = {},
 ): ReviewReadinessReport {
   const spec = specFrom(task);
   const runLogs = evidence.runLogs ?? [];
@@ -315,43 +353,48 @@ export function evaluateReviewReadiness(
   const recordedCommands = runLogCommands(runLogs);
   const missingVerificationCommands = missingExpectedCommands(
     spec.verification.commands,
-    recordedCommands
+    recordedCommands,
   );
   const failedCommands = failedVerificationCommands(runLogs);
-  const hasVerificationCommands = recordedCommands.length > 0 &&
-    missingVerificationCommands.length === 0;
+  const hasVerificationCommands =
+    recordedCommands.length > 0 && missingVerificationCommands.length === 0;
   const hasVerificationResults = hasRecordedVerificationResult(runLogs);
   const hasVerificationEvidence = recordedCommands.length > 0 && hasVerificationResults;
-  const hasVerification = hasVerificationCommands && hasVerificationResults && failedCommands.length === 0;
+  const hasVerification =
+    hasVerificationCommands && hasVerificationResults && failedCommands.length === 0;
   const hasRisks = runLogs.some((log) => hasExplicitValue(log.risks));
   const risks = documentedRisks(runLogs);
   const overlappingFiles = pathOverlaps(runLogs, evidence.gitChangedFiles);
   const acceptance = acceptanceCoverage(spec, runLogs);
   const uncoveredCriteria = acceptance.uncovered;
   const unmappedAcceptanceEvidence = acceptance.unmapped;
-  const hasAcceptanceEvidence = runLogs.some((log) => (
-    (log.acceptanceCriteriaEvidence ?? []).some((entry) => (
-      hasExplicitValue(entry.criterion) || hasExplicitValue(entry.evidence)
-    ))
-  ));
-  const missingReceiptFields = spec.outputs_required.filter((field) => (
-    !receiptFieldIsPresent(field, runLogs, changedFilesSource, hasVerificationEvidence, hasRisks)
-  ));
+  const hasAcceptanceEvidence = runLogs.some((log) =>
+    (log.acceptanceCriteriaEvidence ?? []).some(
+      (entry) => hasExplicitValue(entry.criterion) || hasExplicitValue(entry.evidence),
+    ),
+  );
+  const missingReceiptFields = spec.outputs_required.filter(
+    (field) =>
+      !receiptFieldIsPresent(field, runLogs, changedFilesSource, hasVerificationEvidence, hasRisks),
+  );
   const hasBudgetWarning = hasOverBudgetTokenEstimate(runLogs);
-  const hasBudgetWarningOnlyConfirmation = !hasBudgetWarning || hasWarningOnlyBudgetConfirmation(runLogs);
+  const hasBudgetWarningOnlyConfirmation =
+    !hasBudgetWarning || hasWarningOnlyBudgetConfirmation(runLogs);
 
   const missingEvidence: string[] = [];
   if (!hasRunLog) {
     missingEvidence.push(`No run log is available for task ${spec.id}.`);
   }
   if (changedFilesSource === "missing") {
-    missingEvidence.push("No changed files are listed in the run log or available from git status.");
+    missingEvidence.push(
+      "No changed files are listed in the run log or available from git status.",
+    );
   }
   if (recordedCommands.length === 0) {
     missingEvidence.push("No verification commands are recorded in the run log.");
   } else if (missingVerificationCommands.length > 0) {
     missingEvidence.push(
-      `Run log is missing expected verification command(s): ${missingVerificationCommands.join(", ")}.`
+      `Run log is missing expected verification command(s): ${missingVerificationCommands.join(", ")}.`,
     );
   }
   if (!hasVerificationResults) {
@@ -361,22 +404,32 @@ export function evaluateReviewReadiness(
     missingEvidence.push(`Verification receipt is not parseable: ${parseError}.`);
   }
   if (failedCommands.length > 0) {
-    missingEvidence.push(`Verification command(s) appear to have failed: ${failedCommands.join(", ")}.`);
+    missingEvidence.push(
+      `Verification command(s) appear to have failed: ${failedCommands.join(", ")}.`,
+    );
   }
   if (!hasRisks) {
-    missingEvidence.push("No risks entry is recorded in the run log; use \"none\" when no risks remain.");
+    missingEvidence.push(
+      'No risks entry is recorded in the run log; use "none" when no risks remain.',
+    );
   }
   if (missingReceiptFields.length > 0) {
-    missingEvidence.push(`Run log is missing required receipt field(s): ${missingReceiptFields.join(", ")}.`);
+    missingEvidence.push(
+      `Run log is missing required receipt field(s): ${missingReceiptFields.join(", ")}.`,
+    );
   }
   if (uncoveredCriteria.length > 0 && !hasAcceptanceEvidence) {
-    missingEvidence.push(sentence(unmappedAcceptanceEvidence.length > 0
-      ? `Acceptance evidence is present but not mapped to task criteria; uncovered criteria: ${uncoveredCriteria.join(" | ")}`
-      : `Acceptance criteria without evidence: ${uncoveredCriteria.join(" | ")}`));
+    missingEvidence.push(
+      sentence(
+        unmappedAcceptanceEvidence.length > 0
+          ? `Acceptance evidence is present but not mapped to task criteria; uncovered criteria: ${uncoveredCriteria.join(" | ")}`
+          : `Acceptance criteria without evidence: ${uncoveredCriteria.join(" | ")}`,
+      ),
+    );
   }
   if (!hasBudgetWarningOnlyConfirmation) {
     missingEvidence.push(
-      "Over-budget token estimate needs review evidence confirming budget overages are warning-only."
+      "Over-budget token estimate needs review evidence confirming budget overages are warning-only.",
     );
   }
 
@@ -397,11 +450,14 @@ export function evaluateReviewReadiness(
       id: "tests",
       label: "Expected tests are recorded and passing",
       passed: hasVerification,
-      reason: [
-        ...missingVerificationCommands.map((command) => `missing ${command}`),
-        ...failedCommands.map((command) => `failed ${command}`),
-        !hasVerificationResults ? "missing result" : "",
-      ].filter(Boolean).join("; ") || undefined,
+      reason:
+        [
+          ...missingVerificationCommands.map((command) => `missing ${command}`),
+          ...failedCommands.map((command) => `failed ${command}`),
+          !hasVerificationResults ? "missing result" : "",
+        ]
+          .filter(Boolean)
+          .join("; ") || undefined,
     },
     {
       id: "path-overlap",
@@ -433,7 +489,7 @@ export function evaluateReviewReadiness(
   const score = scoreFrom(checklist);
   const humanReviewReasons = checklist
     .filter((item) => !item.passed)
-    .map((item) => item.reason ? `${item.label}: ${item.reason}` : item.label);
+    .map((item) => (item.reason ? `${item.label}: ${item.reason}` : item.label));
   const humanReviewNeeded = humanReviewReasons.length > 0;
 
   return {

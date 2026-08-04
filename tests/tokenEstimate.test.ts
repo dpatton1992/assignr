@@ -1,22 +1,22 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { spawnSync } from "child_process";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stringify } from "yaml";
 
 import { initCommand } from "../src/commands/init.js";
+import { runLogCommand } from "../src/commands/runLog.js";
 import {
   buildTokenEstimate,
   DEFAULT_TOKEN_BUDGET,
   estimateTokens,
-  renderTokenEstimateRunLogSection,
   renderTokenEstimate,
+  renderTokenEstimateRunLogSection,
   tokenEstimateCommand,
 } from "../src/commands/tokenEstimate.js";
-import { runLogCommand } from "../src/commands/runLog.js";
-import { getPaths } from "../src/utils/paths.js";
 import type { TaskSpec } from "../src/specs/schema.js";
+import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
@@ -40,6 +40,14 @@ function writeTask(id: string, overrides: Partial<TaskSpec> = {}): void {
     domain: "core",
     priority: "medium",
     depends_on: [],
+    blocks: [],
+    conflicts_with: [],
+    can_run_independently: true,
+    path_ownership: {
+      touched_paths: [],
+      locked_paths: [],
+      unsafe_parallel_areas: [],
+    },
     allowed_paths: ["src/commands/tokenEstimate.ts", "tests/tokenEstimate.test.ts"],
     forbidden_paths: ["dist/"],
     goal: "Estimate prompt size before worker handoff.",
@@ -76,8 +84,12 @@ describe("tokenEstimateCommand", () => {
 
     expect(result.budget).toBe(DEFAULT_TOKEN_BUDGET);
     expect(output).toContain("# Token Estimate: estimate-normal");
-    expect(output).toContain("Deterministic local heuristic: estimated tokens = ceil(characters / 4). No external APIs are called.");
-    expect(output).toContain("Scope: estimates Manciple artifact/context bloat only, not total provider, harness, tool, retry, reasoning, or generated-output usage.");
+    expect(output).toContain(
+      "Deterministic local heuristic: estimated tokens = ceil(characters / 4). No external APIs are called.",
+    );
+    expect(output).toContain(
+      "Scope: estimates Manciple artifact/context bloat only, not total provider, harness, tool, retry, reasoning, or generated-output usage.",
+    );
     expect(output).toContain("- estimated: true");
     expect(output).toContain("- method: ceil(characters / 4)");
     expect(output).toContain("- base Manciple handoff:");
@@ -90,17 +102,23 @@ describe("tokenEstimateCommand", () => {
 
   it("reports missing task handling with a non-zero exit", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     try {
-      expect(() => tokenEstimateCommand({
-        specsTasksDir: p.specsTasks,
-        cwd,
-        taskId: "missing-task",
-      })).toThrow("process.exit(1)");
-      expect(errorSpy.mock.calls.flat().join("\n")).toContain("No task found with id: missing-task");
+      expect(() =>
+        tokenEstimateCommand({
+          specsTasksDir: p.specsTasks,
+          cwd,
+          taskId: "missing-task",
+        }),
+      ).toThrow("process.exit(1)");
+      expect(errorSpy.mock.calls.flat().join("\n")).toContain(
+        "No task found with id: missing-task",
+      );
     } finally {
       errorSpy.mockRestore();
       exitSpy.mockRestore();
@@ -115,7 +133,9 @@ describe("tokenEstimateCommand", () => {
       testsRun: ["pnpm test -- tokenEstimate"],
       filesChanged: ["src/commands/tokenEstimate.ts"],
       risks: "none",
-      acceptanceCriteriaEvidence: ["The token estimate command reports source buckets.: Output labels were asserted."],
+      acceptanceCriteriaEvidence: [
+        "The token estimate command reports source buckets.: Output labels were asserted.",
+      ],
     });
     spawnSync("git", ["init"], { cwd, encoding: "utf-8" });
     spawnSync("git", ["config", "user.email", "test@example.com"], { cwd, encoding: "utf-8" });
@@ -126,15 +146,17 @@ describe("tokenEstimateCommand", () => {
     writeFileSync(join(cwd, "tracked.txt"), "after\n", "utf-8");
     writeFileSync(join(cwd, "untracked.txt"), "context\n", "utf-8");
 
-    const output = renderTokenEstimate(buildTokenEstimate({
-      specsTasksDir: p.specsTasks,
-      cwd,
-      taskId: "estimate-optional",
-      includeReview: true,
-      includeRunLog: true,
-      includeDiff: true,
-      includeGitContext: true,
-    }));
+    const output = renderTokenEstimate(
+      buildTokenEstimate({
+        specsTasksDir: p.specsTasks,
+        cwd,
+        taskId: "estimate-optional",
+        includeReview: true,
+        includeRunLog: true,
+        includeDiff: true,
+        includeGitContext: true,
+      }),
+    );
 
     expect(output).toContain("- review prompt:");
     expect(output).toContain("- latest run log:");
@@ -147,12 +169,14 @@ describe("tokenEstimateCommand", () => {
       goal: "x".repeat(100),
     });
 
-    const output = renderTokenEstimate(buildTokenEstimate({
-      specsTasksDir: p.specsTasks,
-      cwd,
-      taskId: "estimate-over-budget",
-      budget: 1,
-    }));
+    const output = renderTokenEstimate(
+      buildTokenEstimate({
+        specsTasksDir: p.specsTasks,
+        cwd,
+        taskId: "estimate-over-budget",
+        budget: 1,
+      }),
+    );
 
     expect(output).toContain("Budget: 1 estimated tokens");
     expect(output).toContain("Risk: over budget");
@@ -167,7 +191,7 @@ describe("tokenEstimateCommand", () => {
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
 
     const result = spawnSync(
@@ -179,7 +203,7 @@ describe("tokenEstimateCommand", () => {
         "--budget",
         "1",
       ],
-      { cwd, encoding: "utf-8" }
+      { cwd, encoding: "utf-8" },
     );
 
     expect(result.status).toBe(0);
@@ -190,12 +214,14 @@ describe("tokenEstimateCommand", () => {
   it("renders persisted run-log estimate markers and warning-only budget text", () => {
     writeTask("estimate-section");
 
-    const section = renderTokenEstimateRunLogSection(buildTokenEstimate({
-      specsTasksDir: p.specsTasks,
-      cwd,
-      taskId: "estimate-section",
-      budget: 1,
-    }));
+    const section = renderTokenEstimateRunLogSection(
+      buildTokenEstimate({
+        specsTasksDir: p.specsTasks,
+        cwd,
+        taskId: "estimate-section",
+        budget: 1,
+      }),
+    );
 
     expect(section).toContain("## Token Estimate");
     expect(section).toContain("_Source: manciple token-estimate --append-run-log_");
@@ -216,14 +242,16 @@ describe("tokenEstimateCommand", () => {
       filesChanged: ["src/commands/tokenEstimate.ts"],
       decisionsMade: ["Stored estimates in the durable run log."],
       risks: "none",
-      acceptanceCriteriaEvidence: ["The token estimate command reports source buckets.: Output labels were asserted."],
+      acceptanceCriteriaEvidence: [
+        "The token estimate command reports source buckets.: Output labels were asserted.",
+      ],
     });
 
     const tsxBin = join(
       process.cwd(),
       "node_modules",
       ".bin",
-      process.platform === "win32" ? "tsx.cmd" : "tsx"
+      process.platform === "win32" ? "tsx.cmd" : "tsx",
     );
 
     const result = spawnSync(
@@ -238,10 +266,12 @@ describe("tokenEstimateCommand", () => {
         "--include-git-context",
         "--append-run-log",
       ],
-      { cwd, encoding: "utf-8" }
+      { cwd, encoding: "utf-8" },
     );
 
-    const files = readdirSync(p.runs).filter((file) => file.endsWith("-estimate-append.md")).sort();
+    const files = readdirSync(p.runs)
+      .filter((file) => file.endsWith("-estimate-append.md"))
+      .sort();
     const content = readFileSync(join(p.runs, files.at(-1) ?? ""), "utf-8");
 
     expect(result.status).toBe(0);

@@ -1,5 +1,5 @@
-import { approveTask, ReviewActionError } from "../lifecycle/taskLifecycleService.js";
 import picocolors from "picocolors";
+import { approveTask, ReviewActionError } from "../lifecycle/taskLifecycleService.js";
 
 export interface ReviewOutcomeCommandOptions {
   specsTasksDir: string;
@@ -13,7 +13,9 @@ export function approveCommand(taskId: string, options: ReviewOutcomeCommandOpti
     const result = approveTask(taskId, options);
 
     console.log(`Recorded review outcome: ${result.outcomePath}`);
-    console.log(`${picocolors.green("Approved:")} ${result.taskId} ${picocolors.yellow("→")} ${result.taskPath}`);
+    console.log(
+      `${picocolors.green("Approved:")} ${result.taskId} ${picocolors.yellow("→")} ${result.taskPath}`,
+    );
     if (result.integration) {
       console.log(`Integrated: ${result.integration.branch} → ${result.integration.integratedSha}`);
     }

@@ -1,22 +1,18 @@
-import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  getReviewQueue,
-  getTaskReviewPacket,
-  ReviewPacketError,
-} from "../review/reviewPacket.js";
-import type { ReviewPacketContext } from "../review/reviewPacket.js";
+import { z } from "zod";
+import type { ReviewActionOptions } from "../review/reviewActions.js";
 import {
   approveTask,
   blockReview,
+  ReviewActionError,
   rejectTask,
   reopenTask,
   requestChanges,
-  ReviewActionError,
 } from "../review/reviewActions.js";
-import type { ReviewActionOptions } from "../review/reviewActions.js";
-import { getRepoContext, repoInputSchema } from "./context.js";
+import type { ReviewPacketContext } from "../review/reviewPacket.js";
+import { getReviewQueue, getTaskReviewPacket, ReviewPacketError } from "../review/reviewPacket.js";
 import type { McpRepoContext } from "./context.js";
+import { getRepoContext, repoInputSchema } from "./context.js";
 import { errorResult, jsonResult, toolResult } from "./results.js";
 
 /**
@@ -75,7 +71,7 @@ export function applyReviewDecision(
   taskId: string,
   action: ReviewDecisionAction,
   reason: string | undefined,
-  ctx: McpRepoContext
+  ctx: McpRepoContext,
 ): ReturnType<typeof approveTask> {
   const options = reviewActionOptions(ctx);
 
@@ -108,7 +104,7 @@ export function registerReviewTools(server: McpServer): void {
       toolResult(() => {
         const ctx = getRepoContext(repo);
         return jsonResult(getReviewQueue(reviewPacketContext(ctx)));
-      })
+      }),
   );
 
   server.registerTool(
@@ -132,7 +128,7 @@ export function registerReviewTools(server: McpServer): void {
           if (err instanceof ReviewPacketError) return errorResult(message);
           throw err;
         }
-      })
+      }),
   );
 
   server.registerTool(
@@ -145,12 +141,9 @@ export function registerReviewTools(server: McpServer): void {
         ...repoInputSchema,
         task_id: z.string(),
         action: REVIEW_DECISION_ACTION_SCHEMA.describe(
-          "Review decision action: approve, request_changes, reject, block, or reopen."
+          "Review decision action: approve, request_changes, reject, block, or reopen.",
         ),
-        reason: z
-          .string()
-          .optional()
-          .describe("Required for request_changes, reject, and block."),
+        reason: z.string().optional().describe("Required for request_changes, reject, and block."),
       },
     },
     ({ repo, task_id, action, reason }) =>
@@ -167,6 +160,6 @@ export function registerReviewTools(server: McpServer): void {
           if (err instanceof ReviewPacketError) return errorResult(message);
           throw err;
         }
-      })
+      }),
   );
 }

@@ -13,6 +13,14 @@ const task: TaskSpec = {
   domain: "core",
   priority: "high",
   depends_on: [],
+  blocks: [],
+  conflicts_with: [],
+  can_run_independently: true,
+  path_ownership: {
+    touched_paths: [],
+    locked_paths: [],
+    unsafe_parallel_areas: [],
+  },
   allowed_paths: ["src/review/"],
   forbidden_paths: ["dist/"],
   goal: "Define a review readiness contract.",
@@ -27,22 +35,26 @@ const task: TaskSpec = {
 describe("evaluateReviewReadiness", () => {
   it("reports ready when run-log evidence is complete", () => {
     const report = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts", "tests/reviewReadiness.test.ts"],
-        testsRun: ["pnpm build", "pnpm test"],
-        commandResults: [
-          { command: "pnpm build", status: "passed" },
-          { command: "pnpm test", status: "passed" },
-        ],
-        decisionsMade: ["Scored readiness with a checklist."],
-        result: "complete",
-        risks: "none",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "reviewReadiness tests cover complete receipts.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts", "tests/reviewReadiness.test.ts"],
+          testsRun: ["pnpm build", "pnpm test"],
+          commandResults: [
+            { command: "pnpm build", status: "passed" },
+            { command: "pnpm test", status: "passed" },
+          ],
+          decisionsMade: ["Scored readiness with a checklist."],
+          result: "complete",
+          risks: "none",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "reviewReadiness tests cover complete receipts.",
+            },
+          ],
+        },
+      ],
     });
 
     expect(report.ready).toBe(true);
@@ -66,10 +78,12 @@ describe("evaluateReviewReadiness", () => {
   it("reports partial readiness with git-status changed files and missing run-log evidence", () => {
     const report = evaluateReviewReadiness(task, {
       gitChangedFiles: ["src/review/readiness.ts"],
-      runLogs: [{
-        commandsRun: ["pnpm build"],
-        risks: "Deployment risk remains unknown.",
-      }],
+      runLogs: [
+        {
+          commandsRun: ["pnpm build"],
+          risks: "Deployment risk remains unknown.",
+        },
+      ],
     });
 
     expect(report.ready).toBe(false);
@@ -84,10 +98,16 @@ describe("evaluateReviewReadiness", () => {
     expect(report.missingReceiptFields).toEqual(["tests_run", "decisions_made", "follow_ups"]);
     expect(report.documentedRisks).toEqual(["Deployment risk remains unknown."]);
     expect(report.uncoveredAcceptanceCriteria).toEqual(["Readiness can be evaluated."]);
-    expect(report.missingEvidence).toContain("Run log is missing expected verification command(s): pnpm test.");
+    expect(report.missingEvidence).toContain(
+      "Run log is missing expected verification command(s): pnpm test.",
+    );
     expect(report.missingEvidence).toContain("No verification result is recorded in the run log.");
-    expect(report.missingEvidence).toContain("Run log is missing required receipt field(s): tests_run, decisions_made, follow_ups.");
-    expect(report.missingEvidence).not.toContain("Documented risk(s) need review: Deployment risk remains unknown.");
+    expect(report.missingEvidence).toContain(
+      "Run log is missing required receipt field(s): tests_run, decisions_made, follow_ups.",
+    );
+    expect(report.missingEvidence).not.toContain(
+      "Documented risk(s) need review: Deployment risk remains unknown.",
+    );
   });
 
   it("reports no-run-log missing evidence", () => {
@@ -99,30 +119,48 @@ describe("evaluateReviewReadiness", () => {
     expect(report.changedFilesSource).toBe("missing");
     expect(report.hasVerification).toBe(false);
     expect(report.hasRisks).toBe(false);
-    expect(report.missingReceiptFields).toEqual(["files_changed", "tests_run", "decisions_made", "risks", "follow_ups"]);
+    expect(report.missingReceiptFields).toEqual([
+      "files_changed",
+      "tests_run",
+      "decisions_made",
+      "risks",
+      "follow_ups",
+    ]);
     expect(report.missingEvidence).toContain("No run log is available for task review-ready-task.");
-    expect(report.missingEvidence).toContain("No changed files are listed in the run log or available from git status.");
-    expect(report.missingEvidence).toContain("No verification commands are recorded in the run log.");
+    expect(report.missingEvidence).toContain(
+      "No changed files are listed in the run log or available from git status.",
+    );
+    expect(report.missingEvidence).toContain(
+      "No verification commands are recorded in the run log.",
+    );
     expect(report.missingEvidence).toContain("No verification result is recorded in the run log.");
-    expect(report.missingEvidence).toContain("No risks entry is recorded in the run log; use \"none\" when no risks remain.");
-    expect(report.missingEvidence).toContain("Run log is missing required receipt field(s): files_changed, tests_run, decisions_made, risks, follow_ups.");
+    expect(report.missingEvidence).toContain(
+      'No risks entry is recorded in the run log; use "none" when no risks remain.',
+    );
+    expect(report.missingEvidence).toContain(
+      "Run log is missing required receipt field(s): files_changed, tests_run, decisions_made, risks, follow_ups.",
+    );
   });
 
   it("treats uncommitted run-log files as a human advisory rather than missing evidence", () => {
     const report = evaluateReviewReadiness(task, {
       gitChangedFiles: ["src/review/readiness.ts", "README.md"],
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build", "pnpm test"],
-        result: "complete",
-        decisionsMade: ["Recorded evidence categories separately."],
-        risks: "none",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Covered by tests.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build", "pnpm test"],
+          result: "complete",
+          decisionsMade: ["Recorded evidence categories separately."],
+          risks: "none",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Covered by tests.",
+            },
+          ],
+        },
+      ],
     });
 
     expect(report.ready).toBe(true);
@@ -134,14 +172,16 @@ describe("evaluateReviewReadiness", () => {
 
   it("distinguishes uncovered acceptance criteria", () => {
     const report = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build", "pnpm test"],
-        result: "complete",
-        decisionsMade: ["Recorded receipts."],
-        risks: "none",
-        followUps: ["none"],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build", "pnpm test"],
+          result: "complete",
+          decisionsMade: ["Recorded receipts."],
+          risks: "none",
+          followUps: ["none"],
+        },
+      ],
     });
 
     expect(report.ready).toBe(false);
@@ -151,33 +191,41 @@ describe("evaluateReviewReadiness", () => {
 
   it("distinguishes failing tests from absent tests", () => {
     const failing = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build", "pnpm test"],
-        commandResults: [
-          { command: "pnpm build", status: "passed" },
-          { command: "pnpm test", status: "failed" },
-        ],
-        decisionsMade: ["Recorded failing test evidence."],
-        risks: "none",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Covered by tests.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build", "pnpm test"],
+          commandResults: [
+            { command: "pnpm build", status: "passed" },
+            { command: "pnpm test", status: "failed" },
+          ],
+          decisionsMade: ["Recorded failing test evidence."],
+          risks: "none",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Covered by tests.",
+            },
+          ],
+        },
+      ],
     });
     const absent = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        decisionsMade: ["No tests were run."],
-        risks: "none",
-        followUps: ["Run verification."],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Pending verification.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          decisionsMade: ["No tests were run."],
+          risks: "none",
+          followUps: ["Run verification."],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Pending verification.",
+            },
+          ],
+        },
+      ],
     });
 
     expect(failing.failedVerificationCommands).toEqual(["pnpm test"]);
@@ -188,109 +236,129 @@ describe("evaluateReviewReadiness", () => {
 
   it("accepts over-budget token estimates when warning-only behavior is confirmed", () => {
     const report = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build", "pnpm test"],
-        commandResults: [
-          { command: "pnpm build", status: "passed" },
-          { command: "pnpm test", status: "passed" },
-        ],
-        decisionsMade: ["Token budget overages remain warning-only audit evidence."],
-        risks: "none",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Covered by tests.",
-        }],
-        tokenEstimate: [
-          "Scope: estimates Manciple artifact/context bloat only.",
-          "Budget warning: over budget (15804/4000 estimated tokens). Warning only; no workflow failed.",
-        ].join("\n"),
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build", "pnpm test"],
+          commandResults: [
+            { command: "pnpm build", status: "passed" },
+            { command: "pnpm test", status: "passed" },
+          ],
+          decisionsMade: ["Token budget overages remain warning-only audit evidence."],
+          risks: "none",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Covered by tests.",
+            },
+          ],
+          tokenEstimate: [
+            "Scope: estimates Manciple artifact/context bloat only.",
+            "Budget warning: over budget (15804/4000 estimated tokens). Warning only; no workflow failed.",
+          ].join("\n"),
+        },
+      ],
     });
 
     expect(report.ready).toBe(true);
     expect(report.failedVerificationCommands).toEqual([]);
     expect(report.missingEvidence).toEqual([]);
-    expect(report.checklist).toContainEqual(expect.objectContaining({
-      id: "budget-warning",
-      passed: true,
-    }));
+    expect(report.checklist).toContainEqual(
+      expect.objectContaining({
+        id: "budget-warning",
+        passed: true,
+      }),
+    );
   });
 
   it("reports missing warning-only confirmation as human review evidence instead of a failed command", () => {
     const report = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build", "pnpm test"],
-        commandResults: [
-          { command: "pnpm build", status: "passed" },
-          { command: "pnpm test", status: "passed" },
-        ],
-        decisionsMade: ["Recorded token estimate evidence."],
-        risks: "none",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Covered by tests.",
-        }],
-        tokenEstimate: "Budget warning: over budget (15804/4000 estimated tokens).",
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build", "pnpm test"],
+          commandResults: [
+            { command: "pnpm build", status: "passed" },
+            { command: "pnpm test", status: "passed" },
+          ],
+          decisionsMade: ["Recorded token estimate evidence."],
+          risks: "none",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Covered by tests.",
+            },
+          ],
+          tokenEstimate: "Budget warning: over budget (15804/4000 estimated tokens).",
+        },
+      ],
     });
 
     expect(report.ready).toBe(false);
     expect(report.hasVerification).toBe(true);
     expect(report.failedVerificationCommands).toEqual([]);
     expect(report.missingEvidence).toContain(
-      "Over-budget token estimate needs review evidence confirming budget overages are warning-only."
+      "Over-budget token estimate needs review evidence confirming budget overages are warning-only.",
     );
     expect(report.humanReviewReasons).toContain(
-      "Budget warning present but warning-only behavior confirmed: missing warning-only confirmation"
+      "Budget warning present but warning-only behavior confirmed: missing warning-only confirmation",
     );
   });
 
   it("does not require budget warning evidence for ordinary run logs without token estimates", () => {
     const report = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build", "pnpm test"],
-        commandResults: [
-          { command: "pnpm build", status: "passed" },
-          { command: "pnpm test", status: "passed" },
-        ],
-        decisionsMade: ["Scored readiness with ordinary run-log evidence."],
-        risks: "none",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Covered by tests.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build", "pnpm test"],
+          commandResults: [
+            { command: "pnpm build", status: "passed" },
+            { command: "pnpm test", status: "passed" },
+          ],
+          decisionsMade: ["Scored readiness with ordinary run-log evidence."],
+          risks: "none",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Covered by tests.",
+            },
+          ],
+        },
+      ],
     });
 
     expect(report.ready).toBe(true);
-    expect(report.checklist).toContainEqual(expect.objectContaining({
-      id: "budget-warning",
-      passed: true,
-      reason: "no over-budget token estimate",
-    }));
+    expect(report.checklist).toContainEqual(
+      expect.objectContaining({
+        id: "budget-warning",
+        passed: true,
+        reason: "no over-budget token estimate",
+      }),
+    );
   });
 
   it("accepts human-readable command receipts and mapped acceptance evidence", () => {
     const report = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts", "tests/reviewReadiness.test.ts"],
-        commandsRun: ["pnpm build => PASS"],
-        testsRun: ["pnpm test: passed (10 tests)"],
-        decisionsMade: ["Kept review receipts readable for human reviewers."],
-        result: "complete",
-        risks: "No known residual readiness-scope risks.",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Focused tests exercise the readiness contract and pass.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts", "tests/reviewReadiness.test.ts"],
+          commandsRun: ["pnpm build => PASS"],
+          testsRun: ["pnpm test: passed (10 tests)"],
+          decisionsMade: ["Kept review receipts readable for human reviewers."],
+          result: "complete",
+          risks: "No known residual readiness-scope risks.",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Focused tests exercise the readiness contract and pass.",
+            },
+          ],
+        },
+      ],
     });
 
     expect(report.ready).toBe(true);
@@ -309,18 +377,22 @@ describe("evaluateReviewReadiness", () => {
       },
     };
     const report = evaluateReviewReadiness(shellTask, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ['test "manciple.dev" = "manciple.dev": passed', "pnpm test: passed"],
-        result: "complete",
-        decisionsMade: ["Recorded the expanded shell command."],
-        risks: "none",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Covered by tests.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ['test "manciple.dev" = "manciple.dev": passed', "pnpm test: passed"],
+          result: "complete",
+          decisionsMade: ["Recorded the expanded shell command."],
+          risks: "none",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Covered by tests.",
+            },
+          ],
+        },
+      ],
     });
 
     expect(report.missingVerificationCommands).toEqual([]);
@@ -334,18 +406,20 @@ describe("evaluateReviewReadiness", () => {
       acceptance_criteria: ["First criterion.", "Second criterion."],
     };
     const report = evaluateReviewReadiness(orderedTask, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build: passed", "pnpm test: passed"],
-        result: "complete",
-        decisionsMade: ["Preserved legacy ordered evidence."],
-        risks: "none",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [
-          { criterion: "The first behavior is covered." },
-          { criterion: "The second behavior is covered." },
-        ],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build: passed", "pnpm test: passed"],
+          result: "complete",
+          decisionsMade: ["Preserved legacy ordered evidence."],
+          risks: "none",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            { criterion: "The first behavior is covered." },
+            { criterion: "The second behavior is covered." },
+          ],
+        },
+      ],
     });
 
     expect(report.uncoveredAcceptanceCriteria).toEqual([]);
@@ -355,18 +429,22 @@ describe("evaluateReviewReadiness", () => {
 
   it("keeps documented risks visible without turning them into missing evidence", () => {
     const report = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build: passed", "pnpm test: passed"],
-        result: "complete",
-        decisionsMade: ["Recorded the residual risk."],
-        risks: "Large repositories may take longer to inspect.",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Covered by tests.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build: passed", "pnpm test: passed"],
+          result: "complete",
+          decisionsMade: ["Recorded the residual risk."],
+          risks: "Large repositories may take longer to inspect.",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Covered by tests.",
+            },
+          ],
+        },
+      ],
     });
 
     expect(report.ready).toBe(true);
@@ -377,18 +455,22 @@ describe("evaluateReviewReadiness", () => {
 
   it("records tests_run independently from unrelated missing verification commands", () => {
     const report = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build: passed"],
-        result: "complete",
-        decisionsMade: ["Recorded the partial verification run."],
-        risks: "none",
-        followUps: ["Run the remaining command."],
-        acceptanceCriteriaEvidence: [{
-          criterion: "Readiness can be evaluated.",
-          evidence: "Covered by tests.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build: passed"],
+          result: "complete",
+          decisionsMade: ["Recorded the partial verification run."],
+          risks: "none",
+          followUps: ["Run the remaining command."],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "Readiness can be evaluated.",
+              evidence: "Covered by tests.",
+            },
+          ],
+        },
+      ],
     });
 
     expect(report.missingVerificationCommands).toEqual(["pnpm test"]);
@@ -398,17 +480,21 @@ describe("evaluateReviewReadiness", () => {
 
   it("keeps unmapped acceptance evidence as a human-review warning instead of a gate failure", () => {
     const report = evaluateReviewReadiness(task, {
-      runLogs: [{
-        filesChanged: ["src/review/readiness.ts"],
-        testsRun: ["pnpm build: passed", "pnpm test: passed"],
-        result: "complete",
-        decisionsMade: ["Recorded the available evidence."],
-        risks: "No known code risks. Browser validation was not performed.",
-        followUps: ["none"],
-        acceptanceCriteriaEvidence: [{
-          criterion: "A different claim was exercised.",
-        }],
-      }],
+      runLogs: [
+        {
+          filesChanged: ["src/review/readiness.ts"],
+          testsRun: ["pnpm build: passed", "pnpm test: passed"],
+          result: "complete",
+          decisionsMade: ["Recorded the available evidence."],
+          risks: "No known code risks. Browser validation was not performed.",
+          followUps: ["none"],
+          acceptanceCriteriaEvidence: [
+            {
+              criterion: "A different claim was exercised.",
+            },
+          ],
+        },
+      ],
     });
 
     expect(report.ready).toBe(true);
@@ -447,17 +533,19 @@ describe("evaluateReviewReadiness", () => {
           ],
           failures: [],
         }),
-      }
+      },
     );
 
     const runLogs = parseRunLogEvidence(content);
     const report = evaluateReviewReadiness(task, { runLogs });
 
     expect(runLogs[0].verificationResults).toEqual(["passed"]);
-    expect(runLogs[0].commandResults).toEqual(expect.arrayContaining([
-      expect.objectContaining({ command: "pnpm build", status: "passed" }),
-      expect.objectContaining({ command: "pnpm test", status: "passed" }),
-    ]));
+    expect(runLogs[0].commandResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ command: "pnpm build", status: "passed" }),
+        expect.objectContaining({ command: "pnpm test", status: "passed" }),
+      ]),
+    );
     expect(report.ready).toBe(true);
     expect(report.missingEvidence).toEqual([]);
   });
@@ -482,7 +570,7 @@ describe("evaluateReviewReadiness", () => {
         acceptanceCriteriaEvidence: [
           "Readiness can be evaluated. => Covered by the successful rerun.",
         ],
-      }
+      },
     );
 
     const report = evaluateReviewReadiness(task, {
@@ -511,7 +599,7 @@ describe("evaluateReviewReadiness", () => {
           "Readiness can be evaluated. => Covered by the readiness test.",
         ],
         verifyReceipt: "not-json",
-      }
+      },
     );
 
     const report = evaluateReviewReadiness(task, {
@@ -519,9 +607,12 @@ describe("evaluateReviewReadiness", () => {
     });
 
     expect(report.ready).toBe(false);
-    expect(report.missingEvidence.some((entry) => (
-      entry.startsWith("Verification receipt is not parseable:") && entry.includes("not-json")
-    ))).toBe(true);
+    expect(
+      report.missingEvidence.some(
+        (entry) =>
+          entry.startsWith("Verification receipt is not parseable:") && entry.includes("not-json"),
+      ),
+    ).toBe(true);
   });
 
   it("accepts compact human-readable verification receipts with an explicit ok result", () => {
@@ -542,7 +633,7 @@ describe("evaluateReviewReadiness", () => {
           "Readiness can be evaluated. => Covered by the readiness test.",
         ],
         verifyReceipt: "manciple_verify profile=worker ok=true; commands_run=2; failures=[]",
-      }
+      },
     );
 
     const runLogs = parseRunLogEvidence(content);

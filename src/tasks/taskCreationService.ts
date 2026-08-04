@@ -9,11 +9,11 @@
  * never constructs MCP response payloads. It returns a typed result so CLI and
  * MCP adapters can format their own human-readable or structured output.
  */
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { basename, dirname, join } from "path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { PRIORITIES, TASK_TYPES } from "../constants.js";
-import { loadTasks } from "../specs/loadTasks.js";
 import type { TaskTier } from "../specs/loadTasks.js";
+import { loadTasks } from "../specs/loadTasks.js";
 import { TaskSpecSchema } from "../specs/schema.js";
 import { slugify } from "../utils/slugify.js";
 import { formatYamlDocument } from "../utils/yamlFormat.js";
@@ -75,7 +75,10 @@ function getTasksRoot(tasksDir: string): string {
   const last = basename(tasksDir);
   const parent = dirname(tasksDir);
 
-  if ((last === "active" || last === "completed" || last === "archived") && basename(parent) === "tasks") {
+  if (
+    (last === "active" || last === "completed" || last === "archived") &&
+    basename(parent) === "tasks"
+  ) {
     return parent;
   }
 
@@ -89,7 +92,7 @@ function getTasksRoot(tasksDir: string): string {
 function validateChoice<T extends readonly string[]>(
   value: string,
   allowed: T,
-  label: string
+  label: string,
 ): { ok: true; value: T[number] } | { ok: false; message: string } {
   if (allowed.includes(value)) {
     return { ok: true, value: value as T[number] };
@@ -102,7 +105,11 @@ export function createTask(input: CreateTaskInput): CreateTaskResult {
   const id = slugify(title);
 
   if (!id) {
-    return { ok: false, code: "invalid_id", message: "could not generate a valid id from the provided title." };
+    return {
+      ok: false,
+      code: "invalid_id",
+      message: "could not generate a valid id from the provided title.",
+    };
   }
 
   // Duplicate detection spans every lifecycle tier so a title cannot silently

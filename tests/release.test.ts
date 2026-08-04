@@ -1,14 +1,10 @@
-import { execFileSync, spawnSync } from "child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  bumpVersion,
-  runRelease,
-  verifyReleaseTagInvariant,
-} from "../scripts/release.js";
 import { checkReleaseTagVersion } from "../scripts/checkReleaseTagVersion.js";
+import { bumpVersion, runRelease, verifyReleaseTagInvariant } from "../scripts/release.js";
 
 const projectRoot = process.cwd();
 const checkScript = join(projectRoot, "scripts", "checkReleaseTagVersion.ts");
@@ -24,14 +20,18 @@ function initRepo(version = "0.4.8"): void {
   git(["init", "-b", "main"]);
   git(["config", "user.email", "tests@example.com"]);
   git(["config", "user.name", "Manciple Tests"]);
-  writeFileSync(join(repo, "package.json"), JSON.stringify({ name: "manciple-test", version }, null, 2) + "\n");
+  writeFileSync(
+    join(repo, "package.json"),
+    `${JSON.stringify({ name: "manciple-test", version }, null, 2)}\n`,
+  );
   writeFileSync(join(repo, "tracked.txt"), "base\n", "utf-8");
   git(["add", "."]);
   git(["commit", "-m", "initial"]);
 }
 
 function readVersion(): string {
-  return (JSON.parse(readFileSync(join(repo, "package.json"), "utf-8")) as { version: string }).version;
+  return (JSON.parse(readFileSync(join(repo, "package.json"), "utf-8")) as { version: string })
+    .version;
 }
 
 function tagList(): string[] {
@@ -174,7 +174,10 @@ describe("release flow ordering and fail-closed gates", () => {
   it("writes the version, commits it, tags the version commit, and verifies the invariant before remote steps", () => {
     initRepo("0.4.8");
     const output = captureLogs(() => {
-      runRelease({ bump: "patch", dryRun: false, preview: false }, { cwd: repo, runChecks: false, runRemote: false });
+      runRelease(
+        { bump: "patch", dryRun: false, preview: false },
+        { cwd: repo, runChecks: false, runRemote: false },
+      );
     });
 
     expect(readVersion()).toBe("0.4.9");
@@ -194,8 +197,12 @@ describe("release flow ordering and fail-closed gates", () => {
     initRepo("0.4.8");
     writeFileSync(join(repo, "tracked.txt"), "modified\n", "utf-8");
 
-    expect(() => runRelease({ bump: "patch", dryRun: false, preview: false }, { cwd: repo, runChecks: false, runRemote: false }))
-      .toThrow(/dirty/);
+    expect(() =>
+      runRelease(
+        { bump: "patch", dryRun: false, preview: false },
+        { cwd: repo, runChecks: false, runRemote: false },
+      ),
+    ).toThrow(/dirty/);
 
     expect(readVersion()).toBe("0.4.8");
     expect(tagList()).toEqual([]);
@@ -206,8 +213,12 @@ describe("release flow ordering and fail-closed gates", () => {
     initRepo("0.4.8");
     git(["tag", "v0.4.9"]);
 
-    expect(() => runRelease({ bump: "patch", dryRun: false, preview: false }, { cwd: repo, runChecks: false, runRemote: false }))
-      .toThrow(/already exists/);
+    expect(() =>
+      runRelease(
+        { bump: "patch", dryRun: false, preview: false },
+        { cwd: repo, runChecks: false, runRemote: false },
+      ),
+    ).toThrow(/already exists/);
 
     expect(readVersion()).toBe("0.4.8");
     expect(logCount()).toBe("1");
@@ -218,8 +229,12 @@ describe("release flow ordering and fail-closed gates", () => {
     writeFileSync(join(repo, ".git", "hooks", "pre-commit"), "#!/bin/sh\nexit 1\n", "utf-8");
     chmodSync(join(repo, ".git", "hooks", "pre-commit"), 0o755);
 
-    expect(() => runRelease({ bump: "patch", dryRun: false, preview: false }, { cwd: repo, runChecks: false, runRemote: false }))
-      .toThrow(/Failed to create the version commit/);
+    expect(() =>
+      runRelease(
+        { bump: "patch", dryRun: false, preview: false },
+        { cwd: repo, runChecks: false, runRemote: false },
+      ),
+    ).toThrow(/Failed to create the version commit/);
 
     expect(tagList()).toEqual([]);
     expect(logCount()).toBe("1");

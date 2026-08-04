@@ -1,20 +1,20 @@
-import { execFileSync } from "child_process";
+import { execFileSync } from "node:child_process";
 import {
   appendFileSync,
   closeSync,
   existsSync,
   mkdirSync,
   openSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
-} from "fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "path";
+} from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { loadTasks } from "../specs/loadTasks.js";
 
 export type WorktreeClaimState =
@@ -110,7 +110,10 @@ function gitCommonDir(controlRepo: string, runner: GitRunner): string {
   return canonical(isAbsolute(raw) ? raw : resolve(controlRepo, raw));
 }
 
-function registryPaths(controlRepo: string, runner: GitRunner): {
+function registryPaths(
+  controlRepo: string,
+  runner: GitRunner,
+): {
   dir: string;
   file: string;
   lock: string;
@@ -126,7 +129,11 @@ function emptyRegistry(): WorktreeRegistry {
 function readRegistry(file: string): WorktreeRegistry {
   if (!existsSync(file)) return emptyRegistry();
   const parsed = JSON.parse(readFileSync(file, "utf-8")) as Partial<WorktreeRegistry>;
-  if (parsed.version !== REGISTRY_VERSION || !parsed.worktrees || typeof parsed.worktrees !== "object") {
+  if (
+    parsed.version !== REGISTRY_VERSION ||
+    !parsed.worktrees ||
+    typeof parsed.worktrees !== "object"
+  ) {
     throw new Error(`Unsupported or malformed Manciple worktree registry: ${file}`);
   }
   return parsed as WorktreeRegistry;
@@ -167,7 +174,10 @@ function withRegistry<T>(
   }
 }
 
-function ensurePrimaryCheckout(controlRepo: string, runner: GitRunner): {
+function ensurePrimaryCheckout(
+  controlRepo: string,
+  runner: GitRunner,
+): {
   primary: string;
   branch: string;
   head: string;
@@ -187,7 +197,10 @@ function ensurePrimaryCheckout(controlRepo: string, runner: GitRunner): {
 export function primaryCodeChanges(options: WorktreeServiceOptions): string[] {
   const runner = options.runner ?? runGit;
   const controlRepo = canonical(options.controlRepo);
-  const rootRelative = relative(controlRepo, canonical(dirname(options.worktreesDir))).replace(/\\/g, "/");
+  const rootRelative = relative(controlRepo, canonical(dirname(options.worktreesDir))).replace(
+    /\\/g,
+    "/",
+  );
   const allowedPrefixes = [
     `${rootRelative}/tasks/`,
     `${rootRelative}/specs/tasks/`,
@@ -196,18 +209,22 @@ export function primaryCodeChanges(options: WorktreeServiceOptions): string[] {
     `${rootRelative}/prompts/generated/`,
     `${rootRelative}/worktrees/`,
   ];
-  const allowedFiles = new Set([
-    `${rootRelative}/config.yaml`,
-    `${rootRelative}/domains.yaml`,
-  ]);
+  const allowedFiles = new Set([`${rootRelative}/config.yaml`, `${rootRelative}/domains.yaml`]);
   const tracked = runner(["diff", "--name-only", "HEAD"], controlRepo);
   const untracked = runner(["ls-files", "--others", "--exclude-standard"], controlRepo);
-  return [...new Set(`${tracked}\n${untracked}`
-    .split(/\r?\n/)
-    .map((path) => path.trim().replace(/\\/g, "/"))
-    .filter(Boolean))]
+  return [
+    ...new Set(
+      `${tracked}\n${untracked}`
+        .split(/\r?\n/)
+        .map((path) => path.trim().replace(/\\/g, "/"))
+        .filter(Boolean),
+    ),
+  ]
     .filter((path) => !allowedFiles.has(path))
-    .filter((path) => !allowedPrefixes.some((prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix)));
+    .filter(
+      (path) =>
+        !allowedPrefixes.some((prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix)),
+    );
 }
 
 function ensureLocalExclude(controlRepo: string, worktreesDir: string, runner: GitRunner): void {
@@ -218,7 +235,11 @@ function ensureLocalExclude(controlRepo: string, worktreesDir: string, runner: G
   mkdirSync(infoDir, { recursive: true });
   const existing = existsSync(excludePath) ? readFileSync(excludePath, "utf-8") : "";
   if (!existing.split(/\r?\n/).includes(pattern)) {
-    appendFileSync(excludePath, `${existing && !existing.endsWith("\n") ? "\n" : ""}${pattern}\n`, "utf-8");
+    appendFileSync(
+      excludePath,
+      `${existing && !existing.endsWith("\n") ? "\n" : ""}${pattern}\n`,
+      "utf-8",
+    );
   }
 }
 
@@ -249,7 +270,11 @@ export function getManagedWorktree(
   options: WorktreeServiceOptions,
 ): ManagedWorktreeRecord | undefined {
   const runner = options.runner ?? runGit;
-  return withRegistry(canonical(options.controlRepo), runner, (registry) => registry.worktrees[taskId]);
+  return withRegistry(
+    canonical(options.controlRepo),
+    runner,
+    (registry) => registry.worktrees[taskId],
+  );
 }
 
 export function listManagedWorktrees(options: WorktreeServiceOptions): ManagedWorktreeRecord[] {
@@ -264,7 +289,9 @@ export function findManagedWorktreeByWorkspace(
   options: WorktreeServiceOptions,
 ): ManagedWorktreeRecord | undefined {
   const expected = canonical(workspace);
-  return listManagedWorktrees(options).find((record) => canonical(record.workspacePath) === expected);
+  return listManagedWorktrees(options).find(
+    (record) => canonical(record.workspacePath) === expected,
+  );
 }
 
 /**
@@ -313,12 +340,16 @@ export function prepareManagedWorktree(
   const primary = ensurePrimaryCheckout(controlRepo, runner);
   const worktreesDir = canonical(options.worktreesDir);
   if (worktreesDir === controlRepo || !isWithin(controlRepo, worktreesDir)) {
-    throw new Error(`Managed worktrees directory must be inside the primary checkout: ${worktreesDir}`);
+    throw new Error(
+      `Managed worktrees directory must be inside the primary checkout: ${worktreesDir}`,
+    );
   }
   ensureLocalExclude(controlRepo, worktreesDir, runner);
   const dirty = primaryCodeChanges({ ...options, controlRepo, runner });
   if (dirty.length > 0) {
-    throw new Error(`Refusing to prepare a task worktree while primary code is dirty: ${dirty.join(", ")}`);
+    throw new Error(
+      `Refusing to prepare a task worktree while primary code is dirty: ${dirty.join(", ")}`,
+    );
   }
 
   const workspacePath = resolve(worktreesDir, taskId);
@@ -334,9 +365,15 @@ export function prepareManagedWorktree(
         throw new Error(`Managed worktree record for ${taskId} has an unsafe path or branch.`);
       }
       if (!worktreeExistsAt(existing.workspacePath, branch, runner)) {
-        throw new Error(`Managed worktree for ${taskId} is missing or no longer checks out ${branch}. Run worktree prune or remove.`);
+        throw new Error(
+          `Managed worktree for ${taskId} is missing or no longer checks out ${branch}. Run worktree prune or remove.`,
+        );
       }
-      if (["review_ready", "integrating", "integrated_pending_completion"].includes(existing.claimState)) {
+      if (
+        ["review_ready", "integrating", "integrated_pending_completion"].includes(
+          existing.claimState,
+        )
+      ) {
         throw new Error(
           `Managed worktree for ${taskId} is ${existing.claimState} and cannot be claimed for implementation. ` +
             "Complete the review action or request changes first.",
@@ -356,7 +393,8 @@ export function prepareManagedWorktree(
     }
     mkdirSync(dirname(workspacePath), { recursive: true });
 
-    const branchExists = tryGit(runner, ["show-ref", "--verify", `refs/heads/${branch}`], controlRepo) !== undefined;
+    const branchExists =
+      tryGit(runner, ["show-ref", "--verify", `refs/heads/${branch}`], controlRepo) !== undefined;
     if (branchExists) {
       throw new Error(`Refusing to adopt unregistered task branch: ${branch}`);
     }
@@ -390,7 +428,9 @@ export function setManagedWorktreeState(
   const controlRepo = canonical(options.controlRepo);
   const worktreesDir = canonical(options.worktreesDir);
   if (worktreesDir === controlRepo || !isWithin(controlRepo, worktreesDir)) {
-    throw new Error(`Managed worktrees directory must be inside the primary checkout: ${worktreesDir}`);
+    throw new Error(
+      `Managed worktrees directory must be inside the primary checkout: ${worktreesDir}`,
+    );
   }
   return withRegistry(controlRepo, runner, (registry, file) => {
     const record = registry.worktrees[taskId];
@@ -413,7 +453,9 @@ export function releaseManagedWorktree(
     const record = registry.worktrees[taskId];
     if (!record) return undefined;
     if (["integrating", "integrated_pending_completion"].includes(record.claimState)) {
-      throw new Error(`Managed worktree ${taskId} cannot be released while it is ${record.claimState}.`);
+      throw new Error(
+        `Managed worktree ${taskId} cannot be released while it is ${record.claimState}.`,
+      );
     }
     record.claimState = "available";
     record.updatedAt = new Date().toISOString();
@@ -432,10 +474,17 @@ export function managedWorktreeChangedFiles(
     ["diff", "--cached", "--name-only"],
     ["ls-files", "--others", "--exclude-standard"],
   ];
-  return [...new Set(commands.flatMap((args) => {
-    const output = tryGit(runner, args, record.workspacePath) ?? "";
-    return output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  }))].sort();
+  return [
+    ...new Set(
+      commands.flatMap((args) => {
+        const output = tryGit(runner, args, record.workspacePath) ?? "";
+        return output
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+      }),
+    ),
+  ].sort();
 }
 
 export function removeManagedWorktree(
@@ -446,29 +495,46 @@ export function removeManagedWorktree(
   const controlRepo = canonical(options.controlRepo);
   const worktreesDir = canonical(options.worktreesDir);
   if (worktreesDir === controlRepo || !isWithin(controlRepo, worktreesDir)) {
-    throw new Error(`Managed worktrees directory must be inside the primary checkout: ${worktreesDir}`);
+    throw new Error(
+      `Managed worktrees directory must be inside the primary checkout: ${worktreesDir}`,
+    );
   }
   return withRegistry(controlRepo, runner, (registry, file) => {
     const record = registry.worktrees[taskId];
     if (!record) throw new Error(`Managed worktree not found: ${taskId}`);
     if (record.claimState === "integrating") {
-      throw new Error(`Managed worktree ${taskId} cannot be removed while integration is in progress.`);
+      throw new Error(
+        `Managed worktree ${taskId} cannot be removed while integration is in progress.`,
+      );
     }
     if (!isWithin(worktreesDir, record.workspacePath)) {
-      throw new Error(`Refusing to remove worktree outside the managed directory: ${record.workspacePath}`);
+      throw new Error(
+        `Refusing to remove worktree outside the managed directory: ${record.workspacePath}`,
+      );
     }
 
     if (existsSync(record.workspacePath)) {
-      const changed = runner(["status", "--porcelain=v1", "--untracked-files=all"], record.workspacePath);
+      const changed = runner(
+        ["status", "--porcelain=v1", "--untracked-files=all"],
+        record.workspacePath,
+      );
       if (changed && !options.force) {
-        throw new Error(`Worktree ${taskId} has uncommitted changes. Use --force to remove this managed worktree.`);
+        throw new Error(
+          `Worktree ${taskId} has uncommitted changes. Use --force to remove this managed worktree.`,
+        );
       }
-      runner(["worktree", "remove", ...(options.force ? ["--force"] : []), record.workspacePath], controlRepo);
+      runner(
+        ["worktree", "remove", ...(options.force ? ["--force"] : []), record.workspacePath],
+        controlRepo,
+      );
     }
 
     if (options.deleteBranch !== false) {
       const deleteFlag = options.force ? "-D" : "-d";
-      if (tryGit(runner, ["show-ref", "--verify", `refs/heads/${record.branch}`], controlRepo) !== undefined) {
+      if (
+        tryGit(runner, ["show-ref", "--verify", `refs/heads/${record.branch}`], controlRepo) !==
+        undefined
+      ) {
         runner(["branch", deleteFlag, record.branch], controlRepo);
       }
     }

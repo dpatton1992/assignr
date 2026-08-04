@@ -1,8 +1,8 @@
+import picocolors from "picocolors";
 import { loadConfig } from "../config.js";
+import { completeTask } from "../lifecycle/taskLifecycleService.js";
 import { getPaths } from "../utils/paths.js";
 import { colorForStatus } from "../utils/styling.js";
-import picocolors from "picocolors";
-import { completeTask } from "../lifecycle/taskLifecycleService.js";
 
 export interface CompleteCommandOptions {
   specsTasksDir: string;
@@ -26,7 +26,7 @@ export function completeCommand(taskId: string, options: CompleteCommandOptions)
     specsTasksDir,
     completedDir,
     controlRepo: cwd,
-    worktreesDir: paths!.worktrees,
+    worktreesDir: paths?.worktrees,
   });
   if (!result.ok) {
     console.error(result.message ?? "Task completion failed.");
@@ -34,5 +34,7 @@ export function completeCommand(taskId: string, options: CompleteCommandOptions)
     return;
   }
 
-  console.log(`${picocolors.green("Completed:")} ${taskId} ${picocolors.yellow("→")} ${colorForStatus("complete")(result.updatedPath.replace(cwd + "/", ""))}`);
+  console.log(
+    `${picocolors.green("Completed:")} ${taskId} ${picocolors.yellow("→")} ${colorForStatus("complete")(result.updatedPath.replace(`${cwd}/`, ""))}`,
+  );
 }

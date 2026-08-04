@@ -1,12 +1,11 @@
-import { loadTasks } from "../specs/loadTasks.js";
-import type { LoadedTaskWithTier } from "../specs/loadTasks.js";
-import { validateTasks } from "../specs/validateTasks.js";
-import type { ValidationCounts } from "../specs/validateTasks.js";
-import type { TaskSpec } from "../specs/schema.js";
-import { getPaths } from "../utils/paths.js";
-import { dirname, relative } from "path";
-import { statusSymbol } from "../utils/styling.js";
+import { dirname, relative } from "node:path";
 import picocolors from "picocolors";
+import type { LoadedTaskWithTier } from "../specs/loadTasks.js";
+import { loadTasks } from "../specs/loadTasks.js";
+import type { TaskSpec } from "../specs/schema.js";
+import type { ValidationCounts } from "../specs/validateTasks.js";
+import { validateTasks } from "../specs/validateTasks.js";
+import { getPaths } from "../utils/paths.js";
 
 function formatCount(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? "" : "s"}`;
@@ -65,7 +64,7 @@ function activeOnlyValidationTasks(specsTasksDir: string): ReturnType<typeof loa
 export function validateCommand(
   specsTasksDir: string,
   cwd: string,
-  options: ValidateCommandOptions = {}
+  options: ValidateCommandOptions = {},
 ): void {
   const activeResult = options.all ? undefined : loadTasks(specsTasksDir, "active");
   const activeFilePaths = new Set(activeResult?.tasks.map((task) => task.filePath));
@@ -85,7 +84,9 @@ export function validateCommand(
   }
 
   if (tasks.length === 0 && loadErrors.length === 0) {
-    console.warn(`  ${picocolors.yellow("⚠")} No tasks found. Run "manciple task new" to create your first task.`);
+    console.warn(
+      `  ${picocolors.yellow("⚠")} No tasks found. Run "manciple task new" to create your first task.`,
+    );
   }
 
   const result = validateTasks(tasks, {
@@ -113,7 +114,9 @@ export function validateCommand(
 
   for (const warning of warnings) {
     totalWarnings++;
-    console.warn(`  ${picocolors.yellow("⚠")} ${relative(cwd, warning.filePath)} [${warning.field}] ${warning.message}`);
+    console.warn(
+      `  ${picocolors.yellow("⚠")} ${relative(cwd, warning.filePath)} [${warning.field}] ${warning.message}`,
+    );
   }
 
   const totalValid = valid.length;
@@ -123,11 +126,20 @@ export function validateCommand(
   console.log(
     `  Checked: ${picocolors.bold(formatCount(checkedCounts.tasksChecked, "task"))}, ` +
       `${picocolors.bold(formatCount(checkedCounts.domainsChecked, "domain"))}, ` +
-      `${picocolors.bold(formatCount(checkedCounts.contractsChecked, "contract"))}`
+      `${picocolors.bold(formatCount(checkedCounts.contractsChecked, "contract"))}`,
   );
-  if (totalValid > 0) console.log(`  ${picocolors.green("✓")} ${picocolors.bold(String(totalValid))} valid task${totalValid === 1 ? "" : "s"}`);
-  if (totalWarnings > 0) console.log(`  ${picocolors.yellow("⚠")} ${picocolors.bold(String(totalWarnings))} warning${totalWarnings === 1 ? "" : "s"}`);
-  if (totalErrors > 0) console.log(`  ${picocolors.red("✕")} ${picocolors.bold(String(totalErrors))} invalid task${totalErrors === 1 ? "" : "s"}`);
+  if (totalValid > 0)
+    console.log(
+      `  ${picocolors.green("✓")} ${picocolors.bold(String(totalValid))} valid task${totalValid === 1 ? "" : "s"}`,
+    );
+  if (totalWarnings > 0)
+    console.log(
+      `  ${picocolors.yellow("⚠")} ${picocolors.bold(String(totalWarnings))} warning${totalWarnings === 1 ? "" : "s"}`,
+    );
+  if (totalErrors > 0)
+    console.log(
+      `  ${picocolors.red("✕")} ${picocolors.bold(String(totalErrors))} invalid task${totalErrors === 1 ? "" : "s"}`,
+    );
 
   if (totalErrors > 0) {
     process.exit(1);

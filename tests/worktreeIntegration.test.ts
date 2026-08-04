@@ -1,15 +1,23 @@
-import { execFileSync, spawnSync } from "child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { parse } from "yaml";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { worktreeCommand } from "../src/commands/worktree.js";
+import { parse } from "yaml";
 import { runLogCommand } from "../src/commands/runLog.js";
 import { setStatusCommand } from "../src/commands/setStatus.js";
+import { worktreeCommand } from "../src/commands/worktree.js";
 import { approveTask } from "../src/review/reviewActions.js";
-import { getManagedWorktree } from "../src/worktrees/manager.js";
 import { getPaths } from "../src/utils/paths.js";
+import { getManagedWorktree } from "../src/worktrees/manager.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
@@ -23,7 +31,9 @@ function git(args: string[], repo: string = cwd): string {
 
 function writeTask(verification = "test -f feature.txt"): void {
   mkdirSync(p.tasksActive, { recursive: true });
-  writeFileSync(join(p.tasksActive, `${taskId}.yaml`), `id: ${taskId}
+  writeFileSync(
+    join(p.tasksActive, `${taskId}.yaml`),
+    `id: ${taskId}
 title: Managed feature
 status: pending
 type: implementation
@@ -51,7 +61,9 @@ outputs_required:
   - tests_run
   - risks
 notes: []
-`, "utf-8");
+`,
+    "utf-8",
+  );
 }
 
 beforeEach(() => {
@@ -128,8 +140,28 @@ function prepareMixedEvidence(): string {
 
 describe("managed worktree approval", () => {
   it.each([
-    ["run-log", (workspacePath: string) => ["run-log", taskId, "--workspace", workspacePath, "--result", "complete"]],
-    ["submit", (workspacePath: string) => ["submit", taskId, "--workspace", workspacePath, "--result", "complete"]],
+    [
+      "run-log",
+      (workspacePath: string) => [
+        "run-log",
+        taskId,
+        "--workspace",
+        workspacePath,
+        "--result",
+        "complete",
+      ],
+    ],
+    [
+      "submit",
+      (workspacePath: string) => [
+        "submit",
+        taskId,
+        "--workspace",
+        workspacePath,
+        "--result",
+        "complete",
+      ],
+    ],
   ])("captures mixed managed-worktree evidence through CLI %s", (_label, argsFor) => {
     const workspacePath = prepareMixedEvidence();
 
@@ -189,8 +221,12 @@ describe("managed worktree approval", () => {
     expect(existsSync(workspacePath)).toBe(false);
     expect(git(["branch", "--list", `manciple/${taskId}`])).toBe("");
     expect(git(["log", "-1", "--pretty=%s"])).toBe(`manciple: integrate ${taskId}`);
-    expect(parse(readFileSync(join(p.tasksCompleted, `${taskId}.yaml`), "utf-8"))).toMatchObject({ status: "complete" });
-    expect(getManagedWorktree(taskId, { controlRepo: cwd, worktreesDir: p.worktrees })).toBeUndefined();
+    expect(parse(readFileSync(join(p.tasksCompleted, `${taskId}.yaml`), "utf-8"))).toMatchObject({
+      status: "complete",
+    });
+    expect(
+      getManagedWorktree(taskId, { controlRepo: cwd, worktreesDir: p.worktrees }),
+    ).toBeUndefined();
   });
 
   it("leaves primary untouched and retains review state when prospective verification fails", () => {
@@ -212,20 +248,23 @@ describe("managed worktree approval", () => {
     writeFileSync(join(workspacePath, "feature.txt"), "managed feature\n", "utf-8");
     submit(workspacePath, failingCommand);
 
-    expect(() => approveTask(taskId, {
-      specsTasksDir: p.specsTasks,
-      cwd,
-      runsDir: p.runs,
-      completedDir: p.tasksCompleted,
-      activeDir: p.tasksActive,
-      archivedDir: p.tasksArchived,
-    })).toThrow("Integration verification failed");
+    expect(() =>
+      approveTask(taskId, {
+        specsTasksDir: p.specsTasks,
+        cwd,
+        runsDir: p.runs,
+        completedDir: p.tasksCompleted,
+        activeDir: p.tasksActive,
+        archivedDir: p.tasksArchived,
+      }),
+    ).toThrow("Integration verification failed");
 
     expect(existsSync(join(cwd, "feature.txt"))).toBe(false);
     expect(existsSync(workspacePath)).toBe(true);
     const task = parse(readFileSync(join(p.tasksActive, `${taskId}.yaml`), "utf-8"));
     expect(task.status).toBe("needs_review");
-    expect(getManagedWorktree(taskId, { controlRepo: cwd, worktreesDir: p.worktrees })?.claimState)
-      .toBe("review_ready");
+    expect(
+      getManagedWorktree(taskId, { controlRepo: cwd, worktreesDir: p.worktrees })?.claimState,
+    ).toBe("review_ready");
   });
 });

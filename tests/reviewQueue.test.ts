@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stringify } from "yaml";
 
 import { initCommand } from "../src/commands/init.js";
 import { reviewQueueCommand } from "../src/commands/reviewQueue.js";
 import { runLogCommand } from "../src/commands/runLog.js";
-import { getPaths } from "../src/utils/paths.js";
 import type { TaskSpec } from "../src/specs/schema.js";
+import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
@@ -32,6 +32,14 @@ function writeTask(id: string, overrides: Partial<TaskSpec> = {}): void {
     domain: "core",
     priority: "medium",
     depends_on: [],
+    blocks: [],
+    conflicts_with: [],
+    can_run_independently: true,
+    path_ownership: {
+      touched_paths: [],
+      locked_paths: [],
+      unsafe_parallel_areas: [],
+    },
     allowed_paths: ["src/commands/reviewQueue.ts", "tests/reviewQueue.test.ts"],
     forbidden_paths: ["dist/"],
     goal: "Triage review queue evidence.",
@@ -48,7 +56,10 @@ function writeTask(id: string, overrides: Partial<TaskSpec> = {}): void {
   writeFileSync(join(p.tasksActive, `${id}.yaml`), stringify(task, { lineWidth: 0 }), "utf-8");
 }
 
-function writeCompleteRunLog(taskId: string, overrides: Parameters<typeof runLogCommand>[5] = {}): void {
+function writeCompleteRunLog(
+  taskId: string,
+  overrides: Parameters<typeof runLogCommand>[5] = {},
+): void {
   runLogCommand(taskId, p.specsTasks, p.runs, p.promptsGenerated, cwd, {
     result: "complete",
     commandsRun: ["pnpm build", "pnpm test"],
@@ -57,7 +68,9 @@ function writeCompleteRunLog(taskId: string, overrides: Parameters<typeof runLog
     decisionsMade: ["Review queue triage classifies task evidence."],
     risks: "none",
     followUps: ["none"],
-    acceptanceCriteriaEvidence: ["Review queue triage classifies task evidence.: Complete receipt covers triage."],
+    acceptanceCriteriaEvidence: [
+      "Review queue triage classifies task evidence.: Complete receipt covers triage.",
+    ],
     ...overrides,
   });
 }
@@ -78,7 +91,9 @@ function runTriage(): void {
   });
 }
 
-function runDeep(options: { all?: boolean; budget?: string | number; deepOnly?: "risky" } = {}): void {
+function runDeep(
+  options: { all?: boolean; budget?: string | number; deepOnly?: "risky" } = {},
+): void {
   reviewQueueCommand(p.tasksActive, cwd, {
     mode: "deep",
     all: options.all,
@@ -98,7 +113,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("ready-review");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -119,7 +136,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("missing-log");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -146,7 +165,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("failed-tests");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -173,7 +194,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("path-violation");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -194,18 +217,22 @@ describe("reviewQueueCommand", () => {
     writeFileSync(join(p.tasksActive, "invalid.yaml"), "id: invalid\nstatus: nope\n", "utf-8");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
     try {
-      expect(() => reviewQueueCommand(p.tasksActive, cwd, {
-        mode: "triage",
-        generatedDir: p.promptsGenerated,
-        activeDir: p.tasksActive,
-        completedDir: p.tasksCompleted,
-        archivedDir: p.tasksArchived,
-      })).toThrow("process.exit(1)");
+      expect(() =>
+        reviewQueueCommand(p.tasksActive, cwd, {
+          mode: "triage",
+          generatedDir: p.promptsGenerated,
+          activeDir: p.tasksActive,
+          completedDir: p.tasksCompleted,
+          archivedDir: p.tasksArchived,
+        }),
+      ).toThrow("process.exit(1)");
       const output = logSpy.mock.calls.flat().join("\n");
       expect(output).toContain("invalid<unknown>");
       expect(output).toContain("load-error");
@@ -220,7 +247,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("missing-evidence");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -246,7 +275,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("risky-review");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -272,7 +303,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("deep-failed-tests");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -300,7 +333,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("deep-path-violation");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -322,7 +357,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("ready-deep-review");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -351,12 +388,16 @@ describe("reviewQueueCommand", () => {
     });
     writeCompleteRunLog("packet-review", {
       risks: "Reviewer should confirm rollout order.",
-      acceptanceCriteriaEvidence: ["Review queue triage classifies task evidence.: Complete receipt covers triage."],
+      acceptanceCriteriaEvidence: [
+        "Review queue triage classifies task evidence.: Complete receipt covers triage.",
+      ],
     });
     writeGeneratedPrompts("packet-review");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -389,7 +430,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("missing-risky");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 
@@ -410,7 +453,9 @@ describe("reviewQueueCommand", () => {
     writeGeneratedPrompts("budgeted-review");
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: string | number | null,
+    ) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
 

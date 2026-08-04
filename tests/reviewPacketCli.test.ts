@@ -1,18 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { spawnSync } from "child_process";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { stringify } from "yaml";
-
+import { completeCommand } from "../src/commands/complete.js";
 import { initCommand } from "../src/commands/init.js";
 import { newCommand } from "../src/commands/new.js";
-import { setStatusCommand } from "../src/commands/setStatus.js";
 import { runLogCommand } from "../src/commands/runLog.js";
-import { completeCommand } from "../src/commands/complete.js";
-import { getPaths } from "../src/utils/paths.js";
+import { setStatusCommand } from "../src/commands/setStatus.js";
 import { getReviewQueue, getTaskReviewPacket } from "../src/review/reviewPacket.js";
 import type { TaskSpec } from "../src/specs/schema.js";
+import { getPaths } from "../src/utils/paths.js";
 
 let cwd: string;
 let p: ReturnType<typeof getPaths>;
@@ -22,7 +21,7 @@ function runCli(args: string[]) {
     process.cwd(),
     "node_modules",
     ".bin",
-    process.platform === "win32" ? "tsx.cmd" : "tsx"
+    process.platform === "win32" ? "tsx.cmd" : "tsx",
   );
   return spawnSync(tsxBin, [join(process.cwd(), "src", "cli.ts"), ...args], {
     cwd,
@@ -90,6 +89,14 @@ function writeRawTask(id: string, overrides: Partial<TaskSpec> = {}): void {
     domain: "core",
     priority: "medium",
     depends_on: [],
+    blocks: [],
+    conflicts_with: [],
+    can_run_independently: true,
+    path_ownership: {
+      touched_paths: [],
+      locked_paths: [],
+      unsafe_parallel_areas: [],
+    },
     allowed_paths: ["src/**"],
     forbidden_paths: [],
     goal: "Contract fixture task.",
@@ -141,7 +148,9 @@ describe("review queue --json (CLI contract)", () => {
     const result = runCli(["review", "queue", "--json"]);
     expect(result.status).toBe(0);
     const parsed = JSON.parse(result.stdout);
-    expect(parsed.blocked.rows.map((row: { taskId: string }) => row.taskId)).toEqual(["blocked-task"]);
+    expect(parsed.blocked.rows.map((row: { taskId: string }) => row.taskId)).toEqual([
+      "blocked-task",
+    ]);
     expect(parsed.blocked.rows[0].status).toBe("blocked");
   });
 
@@ -150,7 +159,7 @@ describe("review queue --json (CLI contract)", () => {
 
     const result = runCli(["review", "queue", "--json"]);
     expect(result.status).toBe(0);
-    expect(result.stdout).not.toMatch(/\u001b\[/);
+    expect(result.stdout).not.toContain("\u001b[");
     expect(JSON.parse(result.stdout)).toBeTruthy();
   });
 
@@ -188,7 +197,7 @@ describe("review packet <task-id> --json (CLI contract)", () => {
         activeDir: p.tasksActive,
         completedDir: p.tasksCompleted,
         archivedDir: p.tasksArchived,
-      })
+      }),
     );
     expect(parsed.taskId).toBe("packet-task");
     expect(parsed.status).toBe("needs_review");
@@ -208,7 +217,7 @@ describe("review packet <task-id> --json (CLI contract)", () => {
 
     const result = runCli(["review", "packet", "no-ansi-packet", "--json"]);
     expect(result.status).toBe(0);
-    expect(result.stdout).not.toMatch(/\u001b\[/);
+    expect(result.stdout).not.toContain("\u001b[");
     expect(JSON.parse(result.stdout).taskId).toBe("no-ansi-packet");
   });
 
@@ -238,17 +247,29 @@ describe("review outcome commands remain backwards compatible", () => {
     expect(existsSync(join(p.tasksCompleted, "compat-task.yaml"))).toBe(true);
 
     createTaskInReview("compat-changes");
-    const changes = runCli(["review", "changes", "compat-changes", "--reason", "Needs more tests."]);
+    const changes = runCli([
+      "review",
+      "changes",
+      "compat-changes",
+      "--reason",
+      "Needs more tests.",
+    ]);
     expect(changes.status).toBe(0);
     expect(JSON.parse(runCli(["review", "packet", "compat-changes", "--json"]).stdout).status).toBe(
-      "in_progress"
+      "in_progress",
     );
 
     createTaskInReview("compat-block");
-    const block = runCli(["review", "block", "compat-block", "--reason", "Environment unavailable."]);
+    const block = runCli([
+      "review",
+      "block",
+      "compat-block",
+      "--reason",
+      "Environment unavailable.",
+    ]);
     expect(block.status).toBe(0);
     expect(JSON.parse(runCli(["review", "packet", "compat-block", "--json"]).stdout).status).toBe(
-      "blocked"
+      "blocked",
     );
   });
 });

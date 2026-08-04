@@ -5,11 +5,12 @@
  * including tier placement/movement, direct-completion safeguards, and
  * managed-worktree claim-state synchronization.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { spawnSync } from "child_process";
-import { join } from "path";
-import { tmpdir } from "os";
+
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import {
   archiveTask,
@@ -82,7 +83,7 @@ function writeTierCopy(taskId: string, tier: "completed" | "archived", status: s
       "notes: []",
       "",
     ].join("\n"),
-    "utf-8"
+    "utf-8",
   );
   return file;
 }
@@ -94,7 +95,10 @@ function initGitRepo(): void {
 }
 
 function gitCommonDir(): string {
-  return spawnSync("git", ["rev-parse", "--git-common-dir"], { cwd, encoding: "utf-8" }).stdout.trim();
+  return spawnSync("git", ["rev-parse", "--git-common-dir"], {
+    cwd,
+    encoding: "utf-8",
+  }).stdout.trim();
 }
 
 function registryPath(): string {
@@ -105,7 +109,7 @@ function writeWorktreeRecord(taskId: string, claimState = "assigned"): void {
   mkdirSync(join(cwd, gitCommonDir(), "manciple"), { recursive: true });
   writeFileSync(
     registryPath(),
-    JSON.stringify(
+    `${JSON.stringify(
       {
         version: 1,
         worktrees: {
@@ -123,9 +127,9 @@ function writeWorktreeRecord(taskId: string, claimState = "assigned"): void {
         },
       },
       null,
-      2
-    ) + "\n",
-    "utf-8"
+      2,
+    )}\n`,
+    "utf-8",
   );
 }
 
@@ -160,7 +164,9 @@ describe("lifecycle service: setTaskStatus", () => {
     expect(result.updatedPath).toBe(join(p.tasksCompleted, `${taskId}.yaml`));
     expect(existsSync(join(p.tasksActive, `${taskId}.yaml`))).toBe(false);
     expect(existsSync(join(p.tasksCompleted, `${taskId}.yaml`))).toBe(true);
-    expect(readFileSync(join(p.tasksCompleted, `${taskId}.yaml`), "utf-8")).toContain("status: complete");
+    expect(readFileSync(join(p.tasksCompleted, `${taskId}.yaml`), "utf-8")).toContain(
+      "status: complete",
+    );
   });
 
   it("moves a task to the archived tier when status becomes archived", () => {
@@ -254,7 +260,9 @@ describe("lifecycle service: completeTask", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.code).toBe("duplicate_in_destination_tier");
-    expect(result.message).toBe(`Task ${taskId} already exists in completed. Use manciple reopen first.`);
+    expect(result.message).toBe(
+      `Task ${taskId} already exists in completed. Use manciple reopen first.`,
+    );
   });
 });
 

@@ -1,25 +1,25 @@
 #!/usr/bin/env node
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { dirname, join, resolve } from "path";
-import { fileURLToPath } from "url";
-import { loadConfig } from "./config.js";
-import { packageVersion } from "./version.js";
-import { DEFAULT_ROOT } from "./constants.js";
+import { registerCheckCommands } from "./commands/check.js";
 import { formatTaskCommand } from "./commands/formatTask.js";
+import { registerHandoffCommands } from "./commands/handoff.js";
 import { initCommand } from "./commands/init.js";
 import { installAssetsCommand } from "./commands/installAssets.js";
+import { configureLegacyCommandCompatibility } from "./commands/legacy.js";
 import { mcpConfigCommand } from "./commands/mcpConfig.js";
 import { migrateAssignrCommand } from "./commands/migrateAssignr.js";
 import { migrateTasksCommand } from "./commands/migrateTasks.js";
-import { normalizeLegacyWorktreeArgs, registerWorktreeCommands } from "./commands/worktree.js";
-import { registerCheckCommands } from "./commands/check.js";
-import { registerHandoffCommands } from "./commands/handoff.js";
-import { configureLegacyCommandCompatibility } from "./commands/legacy.js";
 import { registerReviewCommands } from "./commands/review.js";
 import { registerSubmitCommand } from "./commands/submit.js";
 import { registerTaskCommands } from "./commands/task.js";
+import { normalizeLegacyWorktreeArgs, registerWorktreeCommands } from "./commands/worktree.js";
+import { loadConfig } from "./config.js";
+import { DEFAULT_ROOT } from "./constants.js";
 import { getPaths } from "./utils/paths.js";
 import { headerBanner } from "./utils/styling.js";
+import { packageVersion } from "./version.js";
 
 async function runCliAction(action: () => void | Promise<void>): Promise<void> {
   // Command modules should throw; Commander actions translate failures to stderr and exit codes.
@@ -42,9 +42,12 @@ const p = getPaths(cwd, root);
 const program = new Command();
 
 function shouldLinkGlobalOnInit(): boolean {
-	const invokedScript = process.argv[1];
-	if (!invokedScript) return false;
-	return resolve(invokedScript) === join(packageRoot, "bin", "manciple.js") && resolve(cwd) === packageRoot;
+  const invokedScript = process.argv[1];
+  if (!invokedScript) return false;
+  return (
+    resolve(invokedScript) === join(packageRoot, "bin", "manciple.js") &&
+    resolve(cwd) === packageRoot
+  );
 }
 
 program
@@ -56,29 +59,50 @@ program.addHelpText("beforeAll", headerBanner());
 
 program
   .command("init")
-  .description("Initialize Manciple folder structure, MCP config, gitignore entries, and packaged agent skills/agents in this repo.")
+  .description(
+    "Initialize Manciple folder structure, MCP config, gitignore entries, and packaged agent skills/agents in this repo.",
+  )
   .option("--force", "Overwrite existing files.", false)
   .option("--root <dir>", "Root directory for Manciple.", DEFAULT_ROOT)
   .option("--mcp", "Only set up MCP config (.mcp.json), skip directory creation and agents.", false)
-  .option("--agents", "Only install packaged agent skills and agents, skip directory creation and MCP.", false)
-  .option("--global-mcp", "Also write the manciple MCP server to the user-global OpenCode config (~/.config/opencode/opencode.json). User-global configuration is never touched without this explicit flag.", false)
+  .option(
+    "--agents",
+    "Only install packaged agent skills and agents, skip directory creation and MCP.",
+    false,
+  )
+  .option(
+    "--global-mcp",
+    "Also write the manciple MCP server to the user-global OpenCode config (~/.config/opencode/opencode.json). User-global configuration is never touched without this explicit flag.",
+    false,
+  )
   .option("--verbose", "Show detailed per-directory and per-file output.", false)
-  .action(async (opts: { force: boolean; root: string; mcp: boolean; agents: boolean; globalMcp: boolean; verbose: boolean }) => {
-    await initCommand({
-      force: opts.force,
-      cwd,
-      root: opts.root,
-      mcp: opts.mcp,
-      agents: opts.agents,
-      globalMcp: opts.globalMcp,
-      verbose: opts.verbose,
-      globalLink: shouldLinkGlobalOnInit() ? { packageRoot } : undefined,
-    });
-  });
+  .action(
+    async (opts: {
+      force: boolean;
+      root: string;
+      mcp: boolean;
+      agents: boolean;
+      globalMcp: boolean;
+      verbose: boolean;
+    }) => {
+      await initCommand({
+        force: opts.force,
+        cwd,
+        root: opts.root,
+        mcp: opts.mcp,
+        agents: opts.agents,
+        globalMcp: opts.globalMcp,
+        verbose: opts.verbose,
+        globalLink: shouldLinkGlobalOnInit() ? { packageRoot } : undefined,
+      });
+    },
+  );
 
 program
   .command("install-assets")
-  .description("Copy packaged agent skills (.claude/skills/, .codex/skills/) and OpenCode agents (.opencode/agents/) from node_modules to the repo root.")
+  .description(
+    "Copy packaged agent skills (.claude/skills/, .codex/skills/) and OpenCode agents (.opencode/agents/) from node_modules to the repo root.",
+  )
   .option("--force", "Overwrite existing files.", false)
   .action((opts: { force: boolean }) => {
     installAssetsCommand({ cwd, force: opts.force });
@@ -134,5 +158,7 @@ registerSubmitCommand(program, p, cwd);
 registerReviewCommands(program, p, cwd);
 registerCheckCommands(program, p, cwd, root);
 
-const filteredArgv = normalizeLegacyWorktreeArgs(configureLegacyCommandCompatibility(program, process.argv));
+const filteredArgv = normalizeLegacyWorktreeArgs(
+  configureLegacyCommandCompatibility(program, process.argv),
+);
 program.parse(filteredArgv);

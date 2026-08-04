@@ -1,16 +1,16 @@
-import { existsSync, readdirSync, readFileSync } from "fs";
-import { basename, join } from "path";
-import { loadTasks, pathOwnershipWarningsForTask } from "../specs/loadTasks.js";
-import type { LoadedTaskWithTier, PathOwnershipWarning, TaskTier } from "../specs/loadTasks.js";
-import type { TaskSpec } from "../specs/schema.js";
-import { evaluateReviewReadiness } from "../review/readiness.js";
-import type { ReviewReadinessReport, ReviewReadinessRunLog } from "../review/readiness.js";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import {
   findLatestRunLogPath,
   isRunLogSuperseded,
   parseRunLogEvidence,
 } from "../review/evidence.js";
+import type { ReviewReadinessReport, ReviewReadinessRunLog } from "../review/readiness.js";
+import { evaluateReviewReadiness } from "../review/readiness.js";
 import { getTaskReviewPacket } from "../review/reviewPacket.js";
+import type { LoadedTaskWithTier, PathOwnershipWarning, TaskTier } from "../specs/loadTasks.js";
+import { loadTasks, pathOwnershipWarningsForTask } from "../specs/loadTasks.js";
+import type { TaskSpec } from "../specs/schema.js";
 import { normalizePath } from "../utils/pathUtils.js";
 
 /**
@@ -207,7 +207,10 @@ function runLogCandidates(cwd: string, taskId: string): string[] {
  * only walks back over superseded candidates when the selected latest file is
  * itself superseded.
  */
-function latestNonSupersededRunLog(cwd: string, taskId: string): { path: string; content: string } | undefined {
+function latestNonSupersededRunLog(
+  cwd: string,
+  taskId: string,
+): { path: string; content: string } | undefined {
   const latestPath = findLatestRunLogPath(cwd, taskId);
   if (!latestPath) return undefined;
 
@@ -225,10 +228,16 @@ function latestNonSupersededRunLog(cwd: string, taskId: string): { path: string;
   return undefined;
 }
 
-function receiptHealthFor(logs: ReviewReadinessRunLog[], readiness: ReviewReadinessReport): ReceiptHealth {
+function receiptHealthFor(
+  logs: ReviewReadinessRunLog[],
+  readiness: ReviewReadinessReport,
+): ReceiptHealth {
   if (logs.length === 0) return "missing";
   const latestResult = (logs[0]?.result ?? "").toLowerCase();
-  if (/\b(?:failed|blocked)\b/.test(latestResult) || readiness.failedVerificationCommands.length > 0) {
+  if (
+    /\b(?:failed|blocked)\b/.test(latestResult) ||
+    readiness.failedVerificationCommands.length > 0
+  ) {
     return "failing";
   }
   if (readiness.hasVerification) return "passing";
@@ -245,7 +254,7 @@ function verificationHealthFor(readiness: ReviewReadinessReport): VerificationHe
 function receiptAndReadiness(
   cwd: string,
   taskId: string,
-  spec: TaskSpec
+  spec: TaskSpec,
 ): { receipt: GraphReceiptSummary; readiness: ReviewReadinessReport } {
   const latestPath = findLatestRunLogPath(cwd, taskId);
 
@@ -340,7 +349,10 @@ function overlapVerb(kind: OwnershipOverlapKind): string {
  * for both explicit touched claims and the allowed-path fallback; the fallback
  * (owner declares no touched paths) is ordinary allowed overlap and is weaker.
  */
-function classifyOverlap(warning: PathOwnershipWarning, owner: LoadedTaskWithTier): OwnershipOverlapKind {
+function classifyOverlap(
+  warning: PathOwnershipWarning,
+  owner: LoadedTaskWithTier,
+): OwnershipOverlapKind {
   if (warning.kind === "locked") return "locked";
   if (warning.kind === "unsafe_parallel_area") return "unsafe_parallel_area";
   if (warning.kind === "touched") {
@@ -351,7 +363,7 @@ function classifyOverlap(warning: PathOwnershipWarning, owner: LoadedTaskWithTie
 
 function ownershipMatchesForPair(
   first: LoadedTaskWithTier,
-  second: LoadedTaskWithTier
+  second: LoadedTaskWithTier,
 ): OwnershipOverlapMatch[] {
   const warnings: Array<{
     warning: PathOwnershipWarning;
@@ -392,7 +404,7 @@ function ownershipMatchesForPair(
 function strongestKind(matches: OwnershipOverlapMatch[]): OwnershipOverlapKind {
   return matches.reduce<OwnershipOverlapKind>(
     (best, match) => (OVERLAP_SEVERITY[match.kind] > OVERLAP_SEVERITY[best] ? match.kind : best),
-    "allowed"
+    "allowed",
   );
 }
 
@@ -457,7 +469,10 @@ function buildEdges(baseTasks: LoadedTaskWithTier[], edgeTypes: Set<EdgeType>): 
   return edges.sort(compareEdges);
 }
 
-function resolveBaseTasks(context: TaskGraphContext, options: TaskGraphOptions): LoadedTaskWithTier[] {
+function resolveBaseTasks(
+  context: TaskGraphContext,
+  options: TaskGraphOptions,
+): LoadedTaskWithTier[] {
   const { tasks } = loadTasks(context.specsTasksDir, "all");
   const allTasksMode = options.allTasks === true || options.tier === "all";
 
@@ -516,7 +531,7 @@ function neighborhoodNodeIds(
   focusTask: string,
   edges: GraphEdge[],
   depth: number,
-  nodeIds: Set<string>
+  nodeIds: Set<string>,
 ): Set<string> {
   const included = new Set<string>([focusTask]);
   let frontier = new Set<string>([focusTask]);
@@ -552,7 +567,10 @@ function neighborhoodNodeIds(
  * focused neighborhood traversing both incoming and outgoing edges up to
  * `options.depth` (default 2, -1 or Infinity for unbounded).
  */
-export function getTaskGraphPacket(options: TaskGraphOptions, context: TaskGraphContext): TaskGraphPacket {
+export function getTaskGraphPacket(
+  options: TaskGraphOptions,
+  context: TaskGraphContext,
+): TaskGraphPacket {
   const allTasksMode = options.allTasks === true || options.tier === "all";
   const depth = resolveDepth(options.depth);
   const edgeTypes = resolveEdgeTypes(options.edgeTypes);
@@ -633,7 +651,7 @@ export function getTaskGraphPacket(options: TaskGraphOptions, context: TaskGraph
 export function getTaskGraphNeighborhood(
   taskId: string,
   options: TaskGraphOptions,
-  context: TaskGraphContext
+  context: TaskGraphContext,
 ): TaskGraphPacket {
   return getTaskGraphPacket({ ...options, focusTask: taskId }, context);
 }

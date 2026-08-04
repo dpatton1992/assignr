@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
-import { join } from "path";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { parse } from "yaml";
 import { formatYamlDocument } from "../src/utils/yamlFormat.js";
 
@@ -31,9 +31,7 @@ function formatYaml(path: string): string {
 const args = process.argv.slice(2);
 const checkOnly = args.includes("--check");
 const targets = args.filter((arg) => arg !== "--check");
-const files = (targets.length > 0 ? targets : DEFAULT_TARGETS)
-  .flatMap(collectYamlFiles)
-  .sort();
+const files = (targets.length > 0 ? targets : DEFAULT_TARGETS).flatMap(collectYamlFiles).sort();
 
 let changed = 0;
 let failed = false;

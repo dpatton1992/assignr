@@ -9,44 +9,40 @@
  * - Focus on verifying delegation to existing command functions — do not re-test the
  *   underlying implementations, only the new wrapper wiring.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { parse } from "yaml";
-import { spawnSync } from "child_process";
 
-import { initCommand } from "../src/commands/init.js";
-import { newCommand } from "../src/commands/new.js";
-import { listCommand } from "../src/commands/list.js";
-import { setStatusCommand } from "../src/commands/setStatus.js";
-import { completeCommand } from "../src/commands/complete.js";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parse } from "yaml";
+import { approveCommand } from "../src/commands/approve.js";
 import { archiveCommand } from "../src/commands/archive.js";
-import { reopenCommand } from "../src/commands/reopen.js";
-import { runLogCommand } from "../src/commands/runLog.js";
+import { blockReviewCommand } from "../src/commands/blockReview.js";
+import type { CheckContext } from "../src/commands/check.js";
+import {
+  checkCostCommand,
+  checkDefaultCommand,
+  checkLifecycleSubCommand,
+  checkTasksCommand,
+  checkTokensCommand,
+} from "../src/commands/check.js";
 import { compileCommand } from "../src/commands/compile.js";
-import { taskPacketCommand } from "../src/commands/taskPacket.js";
+import { completeCommand } from "../src/commands/complete.js";
 import { handoffCommand } from "../src/commands/handoff.js";
+import { initCommand } from "../src/commands/init.js";
+import { listCommand } from "../src/commands/list.js";
+import { newCommand } from "../src/commands/new.js";
+import { reopenCommand } from "../src/commands/reopen.js";
+import { requestChangesCommand } from "../src/commands/requestChanges.js";
 import { reviewCommand } from "../src/commands/review.js";
 import { reviewCheckCommand } from "../src/commands/reviewCheck.js";
 import { reviewQueueCommand } from "../src/commands/reviewQueue.js";
-import { approveCommand } from "../src/commands/approve.js";
-import { requestChangesCommand } from "../src/commands/requestChanges.js";
-import { blockReviewCommand } from "../src/commands/blockReview.js";
-import { doctorCommand } from "../src/commands/doctor.js";
-import { validateCommand } from "../src/commands/validate.js";
-import { checkLifecycleCommand } from "../src/commands/checkLifecycle.js";
-import {
-  checkDefaultCommand,
-  checkTasksCommand,
-  checkLifecycleSubCommand,
-  checkTokensCommand,
-  checkCostCommand,
-} from "../src/commands/check.js";
-import type { CheckContext } from "../src/commands/check.js";
-import { getPaths } from "../src/utils/paths.js";
+import { runLogCommand } from "../src/commands/runLog.js";
+import { setStatusCommand } from "../src/commands/setStatus.js";
 import type { Status } from "../src/constants.js";
 import { loadTasks } from "../src/specs/loadTasks.js";
+import { getPaths } from "../src/utils/paths.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -75,13 +71,15 @@ function readStatus(taskId: string): unknown {
   const { tasks } = loadTasks(p.specsTasks, "all");
   const found = tasks.find((t) => t.spec.id === taskId);
   if (!found) return undefined;
-  return (parse(readFileSync(found.filePath, "utf-8")) as Record<string, unknown>)["status"];
+  return (parse(readFileSync(found.filePath, "utf-8")) as Record<string, unknown>).status;
 }
 
-function captureExit(callback: () => void): { error: string; log: string } {
+function _captureExit(callback: () => void): { error: string; log: string } {
   const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const exitSpy = vi.spyOn(process, "exit").mockImplementation(((_code?: string | number | null) => {
+  const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+    _code?: string | number | null,
+  ) => {
     throw new Error(`process.exit(${_code})`);
   }) as never);
 
@@ -91,7 +89,7 @@ function captureExit(callback: () => void): { error: string; log: string } {
       error: errorSpy.mock.calls.flat().join("\n"),
       log: logSpy.mock.calls.flat().join("\n"),
     };
-  } catch (e) {
+  } catch (_e) {
     return {
       error: errorSpy.mock.calls.flat().join("\n"),
       log: logSpy.mock.calls.flat().join("\n"),
@@ -210,7 +208,7 @@ describe("manciple task command group", () => {
     const taskFile = join(p.tasksActive, "task-from-group.yaml");
     expect(existsSync(taskFile)).toBe(true);
     const spec = parse(readFileSync(taskFile, "utf-8")) as Record<string, unknown>;
-    expect(spec["id"]).toBe("task-from-group");
+    expect(spec.id).toBe("task-from-group");
   });
 
   it("task list delegates to listCommand", () => {
@@ -229,7 +227,9 @@ describe("manciple task command group", () => {
     const taskId = createTask("Startable task");
 
     // `manciple task start <task-id>` calls setStatusCommand(id, "in_progress")
-    expect(() => setStatusCommand(taskId, "in_progress" as Status, p.specsTasks, cwd)).not.toThrow();
+    expect(() =>
+      setStatusCommand(taskId, "in_progress" as Status, p.specsTasks, cwd),
+    ).not.toThrow();
     expect(readStatus(taskId)).toBe("in_progress");
   });
 
@@ -242,7 +242,10 @@ describe("manciple task command group", () => {
       const { tasks } = loadTasks(p.specsTasks, "all");
       const found = tasks.find((t) => t.spec.id === taskId);
       expect(found).toBeDefined();
-      const raw = readFileSync(found!.filePath, "utf-8");
+      if (!found) {
+        throw new Error(`Expected to find task ${taskId} in loaded tasks`);
+      }
+      const raw = readFileSync(found.filePath, "utf-8");
       console.log(raw);
     });
 
@@ -300,7 +303,9 @@ describe("manciple task command group", () => {
     setStatusCommand(taskId, "in_progress" as Status, p.specsTasks, cwd);
 
     // `manciple task resume <task-id>` — for non-blocked/non-completed active tasks, sets in_progress
-    expect(() => setStatusCommand(taskId, "in_progress" as Status, p.specsTasks, cwd)).not.toThrow();
+    expect(() =>
+      setStatusCommand(taskId, "in_progress" as Status, p.specsTasks, cwd),
+    ).not.toThrow();
     expect(readStatus(taskId)).toBe("in_progress");
   });
 });

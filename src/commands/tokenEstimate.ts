@@ -1,19 +1,14 @@
-import { spawnSync } from "child_process";
-import { appendFileSync, readFileSync } from "fs";
-import { join } from "path";
+import { spawnSync } from "node:child_process";
+import { appendFileSync, readFileSync } from "node:fs";
+import { findLatestRunLogPath } from "../review/evidence.js";
 import { loadTasks } from "../specs/loadTasks.js";
-import { getTemplate, loadDomainContext } from "./compile.js";
 import {
+  REVIEW_TEMPLATE,
   renderTemplate,
   renderVerificationCommands,
-  REVIEW_TEMPLATE,
 } from "../templates/renderTemplate.js";
-import {
-  readGitDiff,
-  readLatestRunLog,
-  renderReviewPrompt,
-} from "./review.js";
-import { findLatestRunLogPath } from "../review/evidence.js";
+import { getTemplate, loadDomainContext } from "./compile.js";
+import { readGitDiff, readLatestRunLog, renderReviewPrompt } from "./review.js";
 
 export const DEFAULT_TOKEN_BUDGET = 4000;
 export const TOKEN_HEURISTIC_DESCRIPTION =
@@ -69,7 +64,10 @@ function outputRequiredText(values: string[] | undefined): string {
   return values.map((value) => `- ${value}`).join("\n");
 }
 
-function verificationReviewContract(spec: { verification?: { commands: string[] }; outputs_required?: string[] }): string {
+function verificationReviewContract(spec: {
+  verification?: { commands: string[] };
+  outputs_required?: string[];
+}): string {
   return [
     "## Verification Commands",
     renderVerificationCommands(spec.verification?.commands ?? []),
@@ -123,18 +121,22 @@ export function buildTokenEstimate(options: TokenEstimateOptions): TokenEstimate
   const optionalBuckets: TokenEstimateBucket[] = [];
 
   if (options.includeReview) {
-    optionalBuckets.push(estimateBucket(
-      "review prompt",
-      renderReviewPrompt(spec, options.cwd, {
-        includeRunLog: options.includeRunLog ?? false,
-        includeGitDiff: options.includeDiff ?? false,
-      }),
-      true
-    ));
+    optionalBuckets.push(
+      estimateBucket(
+        "review prompt",
+        renderReviewPrompt(spec, options.cwd, {
+          includeRunLog: options.includeRunLog ?? false,
+          includeGitDiff: options.includeDiff ?? false,
+        }),
+        true,
+      ),
+    );
   }
 
   if (options.includeRunLog) {
-    optionalBuckets.push(estimateBucket("latest run log", readLatestRunLog(options.cwd, spec.id), true));
+    optionalBuckets.push(
+      estimateBucket("latest run log", readLatestRunLog(options.cwd, spec.id), true),
+    );
   }
 
   if (options.includeDiff) {
@@ -170,12 +172,14 @@ function renderBucket(bucket: TokenEstimateBucket): string {
 }
 
 export function renderTokenEstimateRunLogSection(result: TokenEstimateResult): string {
-  const budgetLine = result.risk === "over_budget"
-    ? `Budget warning: over budget (${result.totalWithOptional.estimatedTokens}/${result.budget} estimated tokens). Warning only; no workflow failed.`
-    : `Budget warning: within budget (${result.totalWithOptional.estimatedTokens}/${result.budget} estimated tokens). Warning only; no workflow failed.`;
-  const optional = result.optionalBuckets.length > 0
-    ? result.optionalBuckets.map(renderBucket).join("\n")
-    : "- optional sources: not requested";
+  const budgetLine =
+    result.risk === "over_budget"
+      ? `Budget warning: over budget (${result.totalWithOptional.estimatedTokens}/${result.budget} estimated tokens). Warning only; no workflow failed.`
+      : `Budget warning: within budget (${result.totalWithOptional.estimatedTokens}/${result.budget} estimated tokens). Warning only; no workflow failed.`;
+  const optional =
+    result.optionalBuckets.length > 0
+      ? result.optionalBuckets.map(renderBucket).join("\n")
+      : "- optional sources: not requested";
 
   return `## Token Estimate
 
@@ -200,10 +204,15 @@ ${budgetLine}
 `;
 }
 
-export function appendTokenEstimateToLatestRunLog(result: TokenEstimateResult, cwd: string): string {
+export function appendTokenEstimateToLatestRunLog(
+  result: TokenEstimateResult,
+  cwd: string,
+): string {
   const outPath = findLatestRunLogPath(cwd, result.taskId);
   if (!outPath) {
-    throw new Error(`No existing run log found for task ${result.taskId}; create one before using --append-run-log.`);
+    throw new Error(
+      `No existing run log found for task ${result.taskId}; create one before using --append-run-log.`,
+    );
   }
 
   appendFileSync(outPath, `\n${renderTokenEstimateRunLogSection(result)}`, "utf-8");
@@ -211,12 +220,14 @@ export function appendTokenEstimateToLatestRunLog(result: TokenEstimateResult, c
 }
 
 export function renderTokenEstimate(result: TokenEstimateResult): string {
-  const optional = result.optionalBuckets.length > 0
-    ? result.optionalBuckets.map(renderBucket).join("\n")
-    : "- optional sources: not requested";
-  const risk = result.risk === "over_budget"
-    ? `Risk: over budget (${result.totalWithOptional.estimatedTokens}/${result.budget} estimated tokens).`
-    : `Risk: within budget (${result.totalWithOptional.estimatedTokens}/${result.budget} estimated tokens).`;
+  const optional =
+    result.optionalBuckets.length > 0
+      ? result.optionalBuckets.map(renderBucket).join("\n")
+      : "- optional sources: not requested";
+  const risk =
+    result.risk === "over_budget"
+      ? `Risk: over budget (${result.totalWithOptional.estimatedTokens}/${result.budget} estimated tokens).`
+      : `Risk: within budget (${result.totalWithOptional.estimatedTokens}/${result.budget} estimated tokens).`;
 
   return `# Token Estimate: ${result.taskId}
 
@@ -247,7 +258,7 @@ export function tokenEstimateCommand(options: TokenEstimateOptions): void {
     console.log(renderTokenEstimate(result));
     if (options.appendRunLog) {
       const outPath = appendTokenEstimateToLatestRunLog(result, options.cwd);
-      console.log(`Appended token estimate to run log: ${outPath.replace(options.cwd + "/", "")}`);
+      console.log(`Appended token estimate to run log: ${outPath.replace(`${options.cwd}/`, "")}`);
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

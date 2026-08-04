@@ -92,11 +92,11 @@ export function priorityBadge(priority: string, options?: StylingOptions): strin
 export function headerBanner(options?: StylingOptions): string {
   const text = "Manciple — A repo-native workflow layer";
   if (options?.noColor) {
-    return text + "\n";
+    return `${text}\n`;
   }
   // picocolors respects NO_COLOR internally, so when the env var is set,
   // bold/cyan will return plain text automatically
-  return picocolors.bold(picocolors.cyan(text)) + "\n";
+  return `${picocolors.bold(picocolors.cyan(text))}\n`;
 }
 
 /**
