@@ -1,0 +1,108 @@
+id: redesign-review-tui-for-progressive-disclosure
+title: Redesign review TUI for progressive disclosure
+status: pending
+type: implementation
+domain: core
+priority: high
+depends_on: []
+blocks: []
+conflicts_with: []
+can_run_independently: true
+allowed_paths:
+  - src/tui/app.tsx
+  - tests/reviewTui.test.ts
+  - tests/taskGraphTui.test.ts
+  - docs/review-tui.md
+forbidden_paths:
+  - src/review/**
+  - src/tui/graphView.tsx
+  - src/tui/graphLayout.ts
+  - src/tui/service.ts
+  - src/commands/**
+  - package.json
+  - pnpm-lock.yaml
+  - dist/**
+  - .manciple/prompts/generated/**
+  - .manciple/tasks/completed/**
+  - .manciple/tasks/archived/**
+path_ownership:
+  touched_paths: []
+  locked_paths: []
+  unsafe_parallel_areas: []
+goal: Reviewers can scan current work and completed history in a calm, visually
+  structured terminal interface that keeps essential evidence accessible without
+  rendering every queue item and successful detail at once.
+acceptance_criteria:
+  - The queue presents Needs review, Blocked, and Completed as compact selectable
+    sections with counts, renders only the selected section's rows, and initially
+    selects the first nonempty section in needs-review, blocked, completed order.
+  - Tab or right arrow moves to the next queue section, left arrow moves to the
+    previous section, and section changes reset row selection predictably; j/k,
+    up/down, Enter, g, q, Escape, and Ctrl-C retain their current meanings within
+    the selected section.
+  - Queue rows use consistent visual hierarchy for selection, task id, title,
+    priority, and domain, while narrow terminals avoid clipping essential task
+    identity or producing unreadable wrapped metadata.
+  - Long sections, including completed history, render through a terminal-height-
+    bounded viewport that keeps the selected row visible and communicates omitted
+    rows or the current position without loading a separate data source.
+  - Task detail is grouped into visually distinct summary, goal, evidence, and
+    exception or notes regions with semantic status colors and a context-sensitive
+    footer; scrolling is bounded and indicates when more content is available.
+  - Completed-task detail summarizes fully covered acceptance criteria and passing
+    verification instead of repeating every successful item, suppresses empty risks,
+    warnings, and dependency sections, and still expands every uncovered criterion,
+    failed or missing command, scope violation, warning, risk, and dependency.
+  - The existing d diff, r receipt, t tests, g graph or dependency, a approve, e
+    changes, x reject, and o reopen flows remain behaviorally compatible, and the
+    graph overlay continues to open on the row selected in the active queue section.
+  - Rendering remains a pure presentation of ReviewQueueSummary and ReviewPacket;
+    the TUI does not read task YAML, run logs, git state, generated prompts, or
+    Manciple directories except through the existing explicit pager action.
+  - Focused Ink tests cover section navigation, large completed queues, viewport
+    movement, completed success compaction, completed exceptions, active-review
+    evidence visibility, narrow terminals, and regressions in actions, pager flows,
+    session restore, and graph drill-down.
+  - The review TUI guide documents the new section navigation, viewport behavior,
+    completed-task progressive disclosure, responsive layout, and unchanged action
+    keys.
+implementation_notes:
+  - Treat this as a presentation and interaction redesign inside the existing
+    ReviewTui component. Do not change ReviewQueueSummary, ReviewPacket, ReviewService,
+    lifecycle actions, pager contracts, or graph packet semantics.
+  - Use Ink layout and Text styling already available in the project; do not add a
+    styling dependency. Use color, bold, dim text, whitespace, and borders sparingly
+    so NO_COLOR output retains hierarchy through labels and spacing.
+  - Keep one selected bucket and one selected row index in component state. Derive
+    visible rows from the selected ReviewQueueSummary bucket rather than flattening
+    all lifecycle tiers into a single screen.
+  - Base the queue viewport on stdout.rows with a deterministic injectable override
+    for tests. Center or minimally scroll the window around selection and show concise
+    above or below counts when rows are omitted.
+  - >-
+    Completed progressive disclosure applies only to successful detail lines:
+    aggregate all-covered acceptance and all-passing verification into summary rows.
+    Never hide negative or ambiguous evidence, including missing receipts, parse
+    errors, failed or missing checks, uncovered criteria, drift, risks, warnings, or
+    incomplete dependencies.
+  - Keep full command evidence in the existing tests view, full receipts in the
+    receipt view or pager, and the full task-scoped diff behind d; concise detail must
+    point to those keys where a summary replaces repeated lines.
+  - Preserve the existing ReviewTuiSession contract unless a session field is strictly
+    required for pager round-trips. Avoid expanding the task into a general graph-view
+    restyle or a change to noninteractive review command output.
+verification:
+  commands:
+    - pnpm typecheck
+    - pnpm test -- reviewTui taskGraphTui
+    - pnpm run check:format
+    - pnpm build
+outputs_required:
+  - files_changed
+  - tests_run
+  - decisions_made
+  - risks
+notes:
+  - This is a follow-up to the completed add-interactive-review-tui task. It narrows
+    queue presentation and completed-detail density without replacing the established
+    review packet, action, pager, or graph contracts.

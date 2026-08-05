@@ -3,6 +3,17 @@
 This is the `manciple` repo — a task management CLI and MCP server
 for structured agent workflows.
 
+## Workflow Orchestration
+
+Use Manciple for workflow orchestration unless the user explicitly directs you
+not to. For actionable repo work, use the available Manciple MCP tools to load
+or create task context, track lifecycle status, verify the work, and record run
+evidence. Prefer the MCP tools over raw CLI commands when both are available,
+and pass this repository root as the `repo` argument.
+
+Small read-only questions and exploratory inspection do not require creating a
+Manciple task unless the user asks for one.
+
 ## Manciple Token Audits
 
 When asked to audit, estimate, measure, or compare Manciple prompt token size for
